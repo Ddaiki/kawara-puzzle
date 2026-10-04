@@ -11,6 +11,13 @@
 <meta property="og:url" content="https://ddaiki.github.io/kawara-puzzle/">
 <meta property="og:image" content="https://ddaiki.github.io/kawara-puzzle/og.png">
 <meta name="twitter:card" content="summary_large_image">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-LWYHBZDC4L"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("js", new Date()); gtag("config", "G-LWYHBZDC4L");
+window.track = (name, params) => gtag("event", name, params);   // ゲーム内の出来事（開始・現場完成・夕立・終了）
+</script>
 <style>body { margin: 0; } [hidden] { display: none !important; }</style>
 <title>瓦葺きパズル 3D</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -887,6 +894,7 @@ canvas { display: block; touch-action: none; }
     state = "done"; raining = false;
     const bonus = 2000 * level, done = SITES[site], nx = (site + 1) % SITES.length, N = SITES[nx];
     score += bonus; hud();
+    track("site_clear", { site: done.name, score, lines, level });
     showPop("葺き上がり！", `${done.name}の屋根、完成や　+${bonus.toLocaleString()}`);
     sfx("kane"); pixelEvent("site");
     setTimeout(() => card(`
@@ -905,6 +913,7 @@ canvas { display: block; touch-action: none; }
   function endRain() {
     raining = false; cloud = 0;
     const gained = bucket - bucketAtRain;
+    track("rain_end", { site: SITES[site].name, leak_pct: Math.round(gained), bucket: Math.round(bucket) });
     if (gained < .5) {
       const dump = Math.min(bucket, BUCKET_DUMP); bucket -= dump;
       pixelEvent("dry"); sfx("rin"); score += 500 * level; sfx("clear3");
@@ -916,6 +925,7 @@ canvas { display: block; touch-action: none; }
 
   function gameOver(reason) {
     state = "over"; raining = false;
+    track("game_over", { reason: reason === "water" ? "バケツ" : "棟まで", site: SITES[site].name, score, lines, level });
     if (piece) { piece.meshes.forEach((m, i) => slide(m, i * 30)); piece = null; }
     if (ghost) { ghost.forEach(m => roof.remove(m)); ghost = null; }
     let k = 0;
@@ -968,8 +978,10 @@ canvas { display: block; touch-action: none; }
     $("go").onclick = () => { $("overlay").hidden = true; onGo(); };
     $("go").focus();
   }
+  // アクセス解析：GitHub Pages 版だけ window.track が入る（Claude 版では何もしない）
+  const track = (name, params) => { try { if (window.track) window.track(name, params); } catch (e) {} };
   function start() {
-    unlockAudio();
+    unlockAudio(); track("game_start", { site: SITES[0].name });
     reset(); state = "play"; spawn();
   }
 
