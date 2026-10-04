@@ -1,0 +1,1588 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3f8fd8">
+<meta name="description" content="落ちてくる瓦の束を屋根に葺いて、夕立までに隙間なく閉じる。スマホのブラウザですぐ遊べる3D瓦パズル。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="瓦葺きパズル 3D">
+<meta property="og:description" content="落ちてくる瓦の束を屋根に葺いて、夕立までに隙間なく閉じる。スマホのブラウザですぐ遊べる3D瓦パズル。">
+<meta property="og:url" content="https://ddaiki.github.io/kawara-puzzle/">
+<meta property="og:image" content="https://ddaiki.github.io/kawara-puzzle/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>body { margin: 0; } [hidden] { display: none !important; }</style>
+<title>瓦葺きパズル 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DotGothic16&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+/* Layout: 画面いっぱいの3D屋根。上に得点帯と雨雲・バケツ、下に操作ボタン。空と屋根の一枚絵として単一テーマで固定。 */
+:root {
+  --sky-top: #3f8fd8;
+  --sky-low: #cfe9f8;
+  --ink: #ffffff;
+  --ink-dim: rgba(255,255,255,.78);
+  --glass: rgba(14, 32, 52, .42);
+  --accent: #ffcc3d;     /* 金（一段葺き上がり） */
+  --water: #5fc2ff;      /* 雨・バケツ */
+  --danger: #ff5a4a;
+  --storm: #2b3440;      /* 夕立の空 */
+  --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; overflow: hidden; }
+body {
+  margin: 0; background: linear-gradient(180deg, var(--sky-top) 0%, #7dbbe9 45%, var(--sky-low) 100%);
+  color: var(--ink); font-family: var(--body);
+  -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+#dim { position: fixed; inset: 0; z-index: 0; background: linear-gradient(180deg, #1c232c 0%, var(--storm) 60%, #55606b 100%); opacity: 0; pointer-events: none; }
+#stage { position: fixed; inset: 0; z-index: 1; }
+#bg, #px { position: fixed; left: 0; top: 0; pointer-events: none; image-rendering: pixelated; image-rendering: crisp-edges; }
+#bg { z-index: 0; }
+#px { z-index: 2; }
+.bubble {
+  position: fixed; z-index: 3; pointer-events: none; transform: translate(-85%, -100%); white-space: nowrap;
+  font-family: "DotGothic16", var(--body); font-size: 13px; line-height: 1.2; color: #1d1a16; background: #fffaf0; padding: 5px 7px;
+  box-shadow: 0 -3px 0 #1d1a16, 0 3px 0 #1d1a16, -3px 0 0 #1d1a16, 3px 0 0 #1d1a16, 3px 6px 0 rgba(0,0,0,.25);
+}
+.bubble::after { content: ""; position: absolute; right: 12%; bottom: -9px; width: 6px; height: 6px; background: #fffaf0; box-shadow: 3px 3px 0 #1d1a16, -3px 0 0 #1d1a16, 3px 0 0 #1d1a16; }
+.bubble[hidden] { display: none; }
+#flash { position: fixed; inset: 0; z-index: 2; background: #eef6ff; opacity: 0; pointer-events: none; transition: opacity .35s ease-out; }
+#flash.on { opacity: .75; transition: none; }
+canvas { display: block; touch-action: none; }
+
+.hud {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 3; pointer-events: none;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 0;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px;
+}
+.hud .next { justify-self: end; }
+.mute {
+  pointer-events: auto; justify-self: start; width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5);
+  background: var(--glass); color: var(--ink); font-size: 1rem; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.mute:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pill { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 12px; padding: 6px 10px; }
+.hud > .pill:not(.next) { display: grid; grid-template-areas: "s m" "u m"; gap: 0 10px; align-items: center; }
+.hud .score { grid-area: s; } .hud .sub { grid-area: u; } .hud .meters { grid-area: m; }
+.score { font-family: var(--display); font-size: 1.25rem; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.sub { font-size: .64rem; color: var(--ink-dim); margin-top: 3px; display: flex; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.meters { display: grid; grid-template-columns: auto 52px; gap: 4px 5px; align-items: center; font-size: .62rem; font-weight: 700; }
+.bar { height: 6px; border-radius: 4px; background: rgba(255,255,255,.22); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; border-radius: 4px; background: #e8eef4; }
+.bar.cloud.warn i { background: var(--danger); animation: blink .5s steps(2) infinite; }
+.bar.water i { background: var(--water); }
+@keyframes blink { 50% { opacity: .45; } }
+.next { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; }
+.next .lab { font-size: .6rem; letter-spacing: .14em; color: var(--ink-dim); }
+.next .nm { font-size: .64rem; font-weight: 700; }
+#nextGrid { display: grid; gap: 2px; }
+#nextGrid i { width: 8px; height: 8px; border-radius: 2px; display: block; }
+
+.controls {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  display: flex; justify-content: center; gap: 14px;
+}
+.controls button {
+  width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55);
+  background: var(--glass); color: var(--ink); font-size: 1.5rem; font-family: var(--body); font-weight: 700;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+}
+.controls button small { font-size: .6rem; margin-top: 3px; letter-spacing: .05em; }
+.controls button:active { transform: scale(.93); background: rgba(14,32,52,.6); }
+.controls button:focus-visible, .card button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+.pop {
+  position: fixed; left: 50%; top: 38%; z-index: 4; pointer-events: none; text-align: center;
+  transform: translate(-50%, -50%); white-space: nowrap; opacity: 0;
+}
+.pop .big {
+  font-family: var(--display); font-size: clamp(2.4rem, 13vw, 4.6rem); color: var(--accent);
+  -webkit-text-stroke: 2px #6b3d00; text-shadow: 0 4px 0 #6b3d00, 0 10px 24px rgba(0,0,0,.35);
+}
+.pop.rain .big { color: var(--water); -webkit-text-stroke-color: #0d3b66; text-shadow: 0 4px 0 #0d3b66, 0 10px 24px rgba(0,0,0,.35); }
+.pop .small { font-weight: 700; font-size: 1rem; text-shadow: 0 2px 6px rgba(0,0,0,.5); margin-top: 6px; }
+.pop.show { animation: pop 1.3s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -60%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -75%) scale(1); }
+}
+
+.overlay { position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(10, 25, 40, .35); }
+.card {
+  background: rgba(255,255,255,.95); color: #1d2a36; border-radius: 22px; padding: 24px 22px 20px; max-width: 340px; width: 100%;
+  box-shadow: 0 20px 50px rgba(0,0,0,.35); text-align: center; display: flex; flex-direction: column; gap: 12px;
+}
+.card h1, .card h2 { font-family: var(--display); font-weight: 400; margin: 0; line-height: 1.15; text-wrap: balance; }
+.card h1 { font-size: 2.3rem; }
+.card h1 span { display: block; font-size: 1rem; color: #3f8fd8; letter-spacing: .3em; margin-top: 6px; }
+.card h2 { font-size: 1.8rem; }
+.card p { margin: 0; line-height: 1.65; font-size: .9rem; }
+.howto { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; text-align: left; font-size: .86rem; background: #eef4f9; border-radius: 12px; padding: 12px 14px; }
+.howto b { font-family: var(--display); font-weight: 400; color: #3f8fd8; }
+.howto .rain { color: #1f7fc4; }
+.card .go {
+  font-family: var(--display); font-size: 1.3rem; border: none; border-radius: 999px; padding: 14px 20px; cursor: pointer;
+  background: #ff8a1f; color: #fff; box-shadow: 0 5px 0 #b85a00;
+}
+.card .go:active { transform: translateY(3px); box-shadow: 0 2px 0 #b85a00; }
+.best { font-size: .82rem; color: #5b6b78; }
+.result { font-family: var(--display); font-size: 2.4rem; color: #ff8a1f; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .pop.show { animation-duration: .01s; } .bar.cloud.warn i { animation: none; } }
+</style>
+</head>
+<body>
+
+
+<canvas id="bg" aria-hidden="true"></canvas>
+<div id="dim"></div>
+<div id="stage"></div>
+<canvas id="px" aria-hidden="true"></canvas>
+<div class="bubble" id="bubble" hidden></div>
+<div id="flash"></div>
+
+<div class="hud">
+  <button class="mute" id="mute" type="button" aria-label="音を消す">♪</button>
+  <div class="pill">
+    <div class="score" id="score">0</div>
+    <div class="sub"><span id="lv">レベル 1</span><span id="lines">0段</span><span id="area">0.0㎡</span></div>
+    <div class="meters">
+      <span id="cloudLab">雨雲</span><div class="bar cloud" id="cloudBox"><i id="cloudBar"></i></div>
+      <span>バケツ</span><div class="bar water"><i id="bucketBar"></i></div>
+    </div>
+  </div>
+  <div class="pill next">
+    <div class="lab">つぎ</div>
+    <div id="nextGrid"></div>
+    <div class="nm" id="nextName"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="bL" type="button" aria-label="左へ">◀</button>
+  <button id="bRot" type="button" aria-label="回転">⟳<small>回転</small></button>
+  <button id="bDrop" type="button" aria-label="一気に落とす">⤓<small>落とす</small></button>
+  <button id="bR" type="button" aria-label="右へ">▶</button>
+</div>
+
+<div class="pop" id="pop"><div class="big" id="popBig"></div><div class="small" id="popSmall"></div></div>
+
+<div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ===== 盤面 =====
+  const COLS = 8, ROWS = 14, H = ROWS + 4;
+  const PITCH = Math.atan(5 / 10);                 // 5寸勾配 ≒ 26.6°
+  const TILES_PER_M2 = 16;                         // J形53A 桟瓦の葺き枚数（枚/㎡）
+  const GROUND = -4.1;
+  const BASE_Z = .06;
+  const LIFT = .1;                                 // 頭が下の段の尻に乗って持ち上がる量
+  const TL_ROW = 305 / 235 - 1;                    // 瓦の尻が上の段の下にもぐる長さ                              // 瓦桟の高さ（瓦の尻が掛かる）
+  const RAIN_SEC = 8;                              // 夕立の長さ
+  const BUCKET_PER_HOLE = 3.5;                     // 穴1か所・1秒あたりのバケツ増加（%）。穴が増えるほど1か所あたりは鈍る（√）
+  const BUCKET_DUMP = 20;                          // 雨漏りゼロで凌いだら、職人がバケツをこれだけ捨てる（%）
+  // 釉薬瓦の色見本（cc = ガラス質のツヤ）
+  const GLAZE = {
+    ichi: { name: "黄", color: 0xd29a1c, metal: .05, rough: .3, cc: .9 },
+    ni: { name: "青", color: 0x23379a, metal: .15, rough: .25, cc: 1 },
+    san: { name: "銀黒", color: 0x30363d, metal: .4, rough: .22, cc: 1 },
+    kane: { name: "緑", color: 0x1f5a3c, metal: .1, rough: .25, cc: 1 },
+    taba: { name: "いぶし銀", color: 0x8a9198, metal: .85, rough: .48, cc: 0 },
+    okane: { name: "ブラウン", color: 0x4e3328, metal: .2, rough: .28, cc: .9 },
+    toi: { name: "ワインレッド", color: 0x7a1a26, metal: .1, rough: .25, cc: 1 },
+  };
+  // 荷揚げする瓦のひと揚げ分。1枚から5枚まで、どれも3マス四方に収まる
+  const PIECES = {
+    ichi: { name: "一枚", rows: ["#"], w: 5 },
+    ni: { name: "二枚", rows: ["##"], w: 10 },
+    san: { name: "三枚", rows: ["###"], w: 14 },
+    kane: { name: "曲尺", rows: ["#.", "##"], w: 16 },
+    taba: { name: "束", rows: ["##", "##", "#."], w: 18 },
+    okane: { name: "大曲尺", rows: ["#..", "#..", "###"], w: 18 },
+    toi: { name: "樋", rows: ["#.#", "###"], w: 18 },
+  };
+  const ROT = {}, BOX = {};
+  for (const k in PIECES) {
+    const g = PIECES[k].rows, n = Math.max(g.length, ...g.map(r => r.length));
+    let cells = [];
+    g.forEach((row, yt) => [...row].forEach((ch, x) => { if (ch === "#") cells.push([x, n - 1 - yt]); }));
+    ROT[k] = []; BOX[k] = n;
+    for (let i = 0; i < 4; i++) { ROT[k].push(cells); cells = cells.map(([x, y]) => [y, n - 1 - x]); }
+  }
+  const LINES = {
+    1: ["一段！", "ええ通りや"], 2: ["二段！", "ええ手つきや"], 3: ["三段！！！", "いっぺんに三段、たいしたもんや"],
+  };
+  // 現場：10段葺き上げたら次の現場へ。屋根の形で置ける所が変わる
+  const COS_P = Math.cos(PITCH), SIN_P = Math.sin(PITCH);
+  // 下屋は [中心, 半幅]。谷は平面で45°なので、半幅 w の下屋は高さ w/cos まで本屋根に食い込む
+  const HIP_IN = 2, HIP_STEP = 1 / COS_P, HIP_TOP = HIP_IN * HIP_STEP;   // 入母屋：隅棟が平面45°で2枚ぶん内へ入る
+  const SITES = [
+    { key: "kiri", name: "切妻", note: "まずは素直な切妻。端は袖瓦で納める。" },
+    { key: "tani", name: "谷", wings: [[0, 3]], note: "正面に下屋が取り付く。軒の真ん中は下屋の屋根でふさがって、谷に沿って段々になる。" },
+    { key: "iri", name: "入母屋", note: "お寺らしい入母屋。軒は8枚、隅棟に沿って6枚、上は妻の内側の4枚。狭い所から落として、軒先へ横に滑り込ませるのがコツ。" },
+    { key: "L", name: "L字", wings: [[-2, 2]], note: "左に下屋が取り付いたL字の家。谷は右の一本だけ。左の軒はずっと上まで食い込む。" },
+    { key: "futa", name: "二つ谷", wings: [[-2.5, 1.5], [1.5, 1.5]], note: "下屋が二つ並んで谷が四本。軒先に開いているのは二か所だけ。" },
+  ];
+  const wingsOf = key => (SITES.find(t => t.key === key) || {}).wings || [];
+  const SITE_LINES = 10;
+  function makeMask(key) {
+    return Array.from({ length: H }, (_, r) => Array.from({ length: COLS }, (_, c) => {
+      if (r >= ROWS) return true;
+      const x = c - (COLS - 1) / 2, y = r + .5;
+      if (wingsOf(key).some(([cx, w]) => Math.abs(x - cx) < w - y * COS_P)) return false;
+      if (key === "iri") return Math.abs(x) < COLS / 2 - Math.min(HIP_IN, Math.floor(y / HIP_STEP));
+      return true;
+    }));
+  }
+
+  // ===== three.js =====
+  const stage = document.getElementById("stage");
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(dpr);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(36, 1, .1, 200);
+
+  // 空の映り込み（釉薬のツヤに空と地面が映る）
+  {
+    const env = new THREE.Scene();
+    const geo = new THREE.SphereGeometry(10, 32, 16), col = [];
+    const top = new THREE.Color(0x3f8fd8), hor = new THREE.Color(0xe6f3ff), gnd = new THREE.Color(0x5a4c36), c = new THREE.Color();
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i) / 10;
+      if (y > 0) c.copy(hor).lerp(top, Math.pow(y, .6)); else c.copy(hor).lerp(gnd, Math.min(1, -y * 4));
+      col.push(c.r, c.g, c.b);
+    }
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    env.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+    const sunDisk = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    sunDisk.position.set(-5, 7, 5); env.add(sunDisk);
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromScene(env, .02).texture;
+  }
+
+  const hemi = new THREE.HemisphereLight(0xdff1ff, 0x6b5a3a, .45);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff1d6, 1.25);
+  sun.position.set(-8, 18, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 14, bottom: -8, near: 1, far: 50 });
+  sun.shadow.bias = -.0008;
+  scene.add(sun);
+
+  // 屋根面（ローカル: x=列, y=軒→棟, z=屋根の法線）
+  const roof = new THREE.Group();
+  roof.rotation.x = PITCH - Math.PI / 2;
+  scene.add(roof);
+  const cellX = c => c - (COLS - 1) / 2;
+  const cellY = r => r + .5;
+  const DOWN_SLOPE = new THREE.Vector3(0, -Math.sin(PITCH), Math.cos(PITCH));   // 軒へ向かう向き（ワールド）
+
+  // 野地のルーフィング（防水シート）。瓦桟や破風・棟は現場ごとに buildSite で作る
+  const deckTex = (() => {
+    const cv = document.createElement("canvas"); cv.width = 256; cv.height = 448;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#3a3f3c"; g.fillRect(0, 0, 256, 448);
+    for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? "255,255,255" : "0,0,0"},${Math.random() * .06})`; g.fillRect(Math.random() * 256, Math.random() * 448, 2, 2); }
+    for (let y = 448 - 150; y > 0; y -= 150) { g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(0, y, 256, 3); g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(0, y + 3, 256, 1); }   // シートの重ね
+    g.strokeStyle = "rgba(255,255,255,.18)"; g.lineWidth = 1;
+    for (let y = 448 - 75; y > 0; y -= 150) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }   // 印刷の目安線
+    const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  })();
+  const deckMat = new THREE.MeshStandardMaterial({ map: deckTex, roughness: .9, envMapIntensity: .3 });
+  const battenMat = new THREE.MeshStandardMaterial({ color: 0xc89a64, roughness: .85, envMapIntensity: .3 });
+  const bargeMat = new THREE.MeshStandardMaterial({ color: 0x3b2a1c, roughness: .8, envMapIntensity: .3 });
+  const ridgeMat = new THREE.MeshStandardMaterial({ color: 0x7f878f, metalness: .85, roughness: .42, emissive: 0x000000 });
+  const oniMat = new THREE.MeshStandardMaterial({ color: 0x4a5058, metalness: .85, roughness: .45 });
+  // 下屋や入母屋の隅の屋根面：いぶし瓦の葺き目を描いた板（u＝流れと直角、v＝流れ方向、1＝瓦1枚）
+  const sideTileMat = (() => {
+    const cv = document.createElement("canvas"); cv.width = 64; cv.height = 64;
+    const g = cv.getContext("2d");
+    const grd = g.createLinearGradient(0, 0, 64, 0);
+    grd.addColorStop(0, "#9aa1a8"); grd.addColorStop(.3, "#c2c8ce"); grd.addColorStop(.55, "#7c838a"); grd.addColorStop(.85, "#8b9299"); grd.addColorStop(1, "#6f767d");
+    g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = "rgba(0,0,0,.45)"; g.fillRect(0, 58, 64, 6);           // 上の段の頭の影
+    g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(0, 54, 64, 2);
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding;
+    return new THREE.MeshStandardMaterial({ map: t, metalness: .55, roughness: .5, envMapIntensity: .5 });
+  })();
+  const plasterMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xefe9dc).convertSRGBToLinear(), roughness: .95, envMapIntensity: .3, side: THREE.DoubleSide });
+
+  // 家（漆喰の壁と腰板）と地面
+  {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(COLS - .8, 4.2, 9), new THREE.MeshStandardMaterial({ map: templeTex(), roughness: .9, envMapIntensity: .4 }));   // 本堂の壁
+    wall.position.set(0, -2.0, -5.3); wall.receiveShadow = true; scene.add(wall);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ opacity: .22 }));   // 地面はドット絵の背景。影だけ落とす
+    ground.rotation.x = -Math.PI / 2; ground.position.y = GROUND; ground.receiveShadow = true; scene.add(ground);
+  }
+
+  // 雨
+  const RAIN_N = 700;
+  const rainPos = new Float32Array(RAIN_N * 6);
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+  const rainMat = new THREE.LineBasicMaterial({ color: 0xcfe6ff, transparent: true, opacity: 0, depthWrite: false });
+  const rainLines = new THREE.LineSegments(rainGeo, rainMat);
+  rainLines.frustumCulled = false;
+  scene.add(rainLines);
+  const resetDrop = (i, anyY) => {
+    const x = (Math.random() - .5) * 22, z = -14 + Math.random() * 20, y = anyY ? GROUND + Math.random() * 26 : 22;
+    rainPos.set([x, y, z, x + .08, y + .7, z], i * 6);
+  };
+  for (let i = 0; i < RAIN_N; i++) resetDrop(i, true);
+
+  // ===== 瓦の形：J形桟瓦（JIS A 5208 53A 相当）=====
+  // 1マス＝働き寸法（幅265×長さ235mm）。全幅・全長は305mmなので、
+  // 右へ桟が .15、尻（棟側）へ .30 はみ出して、隣の瓦の山・上の段の頭の下にもぐる。
+  const TW = 305 / 265 - 1, TL = 305 / 235 - 1;   // ≒ .151, .298
+  const TK = .06;                                  // 瓦の厚み（約15mm）
+  const U0 = -.5, U1 = .5 + TW, V0 = -.5, V1 = .5 + TL;
+  // 横断面：左に山、まん中に谷、右端に桟（水切りの小山）。隣の瓦の山の縁がこの桟にかぶさる
+  function prof(u) {
+    if (u < .08) {
+      const p = (u + .5) / .58;
+      return p < .38 ? .06 + .11 * Math.sin(p / .38 * Math.PI / 2) : .17 * (.5 + .5 * Math.cos(Math.PI * (p - .38) / .62));
+    }
+    if (u < .44) return -.012 * Math.sin(Math.PI * (u - .08) / .36);
+    if (u < .55) return 0;
+    return .04 * (.5 + .5 * Math.cos(Math.PI * Math.min(1, Math.abs(u - .6) / .05)));
+  }
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const lift = v => LIFT * (V1 - v) / (V1 - V0);                         // 尻は瓦桟に掛かり、頭が上がる
+  const rib = v => v > .62 && v < .76 ? .02 * (.5 + .5 * Math.cos(Math.PI * (v - .69) / .07)) : 0;   // 尻の水返し
+  const skirt = v => .035 * (1 - smooth(-.48, -.4, v));                 // 頭の垂れ（小口が厚く見える）
+  const zTop = (u, v) => prof(u) + lift(v) + TK + rib(v);
+  const zBot = (u, v) => prof(u) + lift(v) - skirt(v);
+  // 切り込み（組み合わせ部）：頭の桟側と尻の山側の角を落とし、4枚が重なる所を2枚にする
+  const solid = (u, v) => !(u > .5 && v < V0 + TL) && !(u < U0 + TW && v > .5);
+
+  function buildTileGeo(u0 = U0, u1 = U1, v0 = V0, v1 = V1) {
+    const brk = (lo, hi, step, extra) => {
+      const s = new Set(extra.filter(x => x > lo && x < hi).map(x => +x.toFixed(4)));
+      for (let x = lo; x < hi; x += step) s.add(+x.toFixed(4));
+      s.add(+lo.toFixed(4)); s.add(+hi.toFixed(4));
+      return [...s].sort((a, b) => a - b);
+    };
+    const us = brk(u0, u1, 1 / 20, [U0 + TW, -.42, -.3, -.2, .08, .44, .5, .55, .6, .65]);   // 山の肩だけ細かく
+    const vs = brk(v0, v1, .3, [-.48, -.44, -.4, V0 + TL, .5, .62, .66, .69, .72, .76]);
+    const nu = us.length - 1, nv = vs.length - 1;
+    const inc = [];
+    for (let i = 0; i < nu; i++) { inc[i] = []; for (let j = 0; j < nv; j++) inc[i][j] = solid((us[i] + us[i + 1]) / 2, (vs[j] + vs[j + 1]) / 2); }
+    const pos = [], nor = [], idx = [];
+    const v = (x, y, z, n) => { pos.push(x, y, z); nor.push(n[0], n[1], n[2]); return pos.length / 3 - 1; };
+    const e = .003;
+    const nrm = (f, x, y, s) => { const a = (f(x + e, y) - f(x - e, y)) / (2 * e), b = (f(x, y + e) - f(x, y - e)) / (2 * e), l = Math.hypot(a, b, 1); return [-a / l * s, -b / l * s, s / l]; };
+    for (const [f, s] of [[zTop, 1], [zBot, -1]]) {                    // 表と裏
+      const id = [];
+      for (let i = 0; i <= nu; i++) { id[i] = []; for (let j = 0; j <= nv; j++) id[i][j] = v(us[i], vs[j], f(us[i], vs[j]), nrm(f, us[i], vs[j], s)); }
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        if (!inc[i][j]) continue;
+        const a = id[i][j], b = id[i + 1][j], c = id[i][j + 1], d = id[i + 1][j + 1];
+        if (s > 0) idx.push(a, b, d, a, d, c); else idx.push(a, d, b, a, c, d);
+      }
+    }
+    const wall = (x1, y1, x2, y2, n) => {                              // 小口（外周と切り込みの立ち上がり）
+      const a = v(x1, y1, zBot(x1, y1), n), b = v(x2, y2, zBot(x2, y2), n), c = v(x1, y1, zTop(x1, y1), n), d = v(x2, y2, zTop(x2, y2), n);
+      idx.push(a, b, d, a, d, c);
+    };
+    const isIn = (i, j) => i >= 0 && j >= 0 && i < nu && j < nv && inc[i][j];
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+      if (!inc[i][j]) continue;
+      const x0 = us[i], x1 = us[i + 1], y0 = vs[j], y1 = vs[j + 1];
+      if (!isIn(i, j - 1)) wall(x1, y0, x0, y0, [0, -1, 0]);
+      if (!isIn(i, j + 1)) wall(x0, y1, x1, y1, [0, 1, 0]);
+      if (!isIn(i - 1, j)) wall(x0, y0, x0, y1, [-1, 0, 0]);
+      if (!isIn(i + 1, j)) wall(x1, y1, x1, y0, [1, 0, 0]);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+    g.setIndex(idx);
+    g.computeBoundingSphere();
+    return g;
+  }
+  const tileGeo = buildTileGeo();
+  // 割れた欠片も本物の瓦の一部（山・谷・桟の曲面がそのまま残る）
+  const shardGeos = [[-.5, -.08, -.5, .1], [-.08, .44, -.5, 0], [-.35, .2, .1, .62], [.2, .5, 0, .5], [-.5, .1, .5, .78]].map(([a, b, c, d]) => {
+    const g = buildTileGeo(a, b, c, d); g.computeBoundingBox();
+    const ctr = new THREE.Vector3(); g.boundingBox.getCenter(ctr); g.translate(-ctr.x, -ctr.y, -ctr.z);
+    return g;
+  });
+  // 全数緊結の釘（山の尻寄り。上の段がかぶると隠れる）
+  const nailGeo = new THREE.CylinderGeometry(.028, .028, .014, 10);
+  nailGeo.rotateX(Math.PI / 2); nailGeo.translate(-.28, .6, zTop(-.28, .6) + .004);
+  const nailMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: .9, roughness: .35 });
+
+  // ===== 役物：万十軒瓦（いちばん下の段）と袖瓦（左右の端の列）=====
+  function mergeGeos(list) {
+    const pos = [], nor = [], idx = [];
+    for (const g of list) {
+      const off = pos.length / 3, p = g.attributes.position.array, n = g.attributes.normal.array;
+      for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]); }
+      const ix = g.index ? g.index.array : Array.from({ length: p.length / 3 }, (_, i) => i);
+      for (let i = 0; i < ix.length; i++) idx.push(ix[i] + off);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+    g.setIndex(idx); g.computeBoundingSphere();
+    return g;
+  }
+  const SLOPE = -Math.atan(LIFT / (V1 - V0));
+  // 瓦の勾配（頭が上がった傾き）に沿わせた板
+  function slab(x0, x1, v0, v1, z0, z1) {
+    const g = new THREE.BoxGeometry(x1 - x0, v1 - v0, z1 - z0).toNonIndexed();
+    g.rotateX(SLOPE);
+    const vc = (v0 + v1) / 2;
+    g.translate((x0 + x1) / 2, vc, (z0 + z1) / 2 + lift(vc));
+    return g;
+  }
+  // 万十軒：谷の前に垂れ、山の前に丸い万十
+  function nokiParts() {
+    const zb = prof(.2) + lift(V0) - skirt(V0);
+    const zt = zTop(.2, V0), tare = new THREE.BoxGeometry(.58, .06, zt - zb + .17).toNonIndexed(); tare.translate(.21, V0 - .03, (zt + zb - .17) / 2);
+    const bead = new THREE.CylinderGeometry(.022, .022, .58, 8).toNonIndexed(); bead.rotateZ(Math.PI / 2); bead.translate(.21, V0 - .06, zb - .15);
+    const zc = lift(V0) + .1;
+    const disk = new THREE.CylinderGeometry(.155, .155, .08, 24).toNonIndexed(); disk.translate(0, -.04, 0);
+    const dome = new THREE.SphereGeometry(.15, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).toNonIndexed(); dome.scale(1, .35, 1); dome.rotateX(Math.PI); dome.translate(0, -.08, 0);
+    const ring = new THREE.TorusGeometry(.14, .018, 6, 24).toNonIndexed(); ring.rotateX(Math.PI / 2); ring.translate(0, -.08, 0);
+    const parts = [disk, dome, ring].map(g => { g.translate(-.25, V0 + .03, zc); return g; });
+    return [tare, bead, ...parts];
+  }
+  // 袖：端を下へ折り曲げて破風板の頭を隠す
+  const sodeL = () => {
+    const roll = new THREE.CylinderGeometry(.04, .04, V1 - V0, 10).toNonIndexed(); roll.rotateX(SLOPE);
+    roll.translate(-.535, (V0 + V1) / 2, .13 + lift((V0 + V1) / 2));
+    return [slab(-.57, -.5, V0, V1, -.22, .14), roll];
+  };
+  const sodeR = () => {
+    const roll = new THREE.CylinderGeometry(.035, .035, V1 - V0, 10).toNonIndexed(); roll.rotateX(SLOPE);
+    roll.translate(.535, (V0 + V1) / 2, .15 + lift((V0 + V1) / 2));
+    return [slab(.5, .57, V0, V1, -.22, .15), roll];
+  };
+  const bodyR = buildTileGeo(U0, .5);                                  // 右袖は桟を持たない
+  const TILE_GEO = {
+    "": tileGeo,
+    L: mergeGeos([tileGeo.toNonIndexed(), ...sodeL()]),
+    R: mergeGeos([bodyR.toNonIndexed(), ...sodeR()]),
+    n: mergeGeos([tileGeo.toNonIndexed(), ...nokiParts()]),
+    nL: mergeGeos([tileGeo.toNonIndexed(), ...nokiParts(), ...sodeL()]),
+    nR: mergeGeos([bodyR.toNonIndexed(), ...nokiParts(), ...sodeR()]),
+  };
+  const geoFor = (c, r) => {
+    let side = "";
+    if (r < ROWS) {
+      const lo = mask[r].indexOf(true), hi = mask[r].lastIndexOf(true);
+      const gable = siteKey !== "iri" || r + .5 > HIP_TOP;                // 入母屋の軒の段は隅棟で納めるので袖にしない
+      if (gable && c === lo && (c === 0 || siteKey === "iri")) side = "L";
+      else if (gable && c === hi && (c === COLS - 1 || siteKey === "iri")) side = "R";
+    }
+    return (r === 0 ? "n" : "") + side;
+  };
+
+  // ===== 銅の軒樋と鎖樋（お寺らしく、竪樋の代わりに鎖で雨を落とす）=====
+  const copperMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xc0763a).convertSRGBToLinear(), metalness: .85, roughness: .32, envMapIntensity: .8 });
+  const CHAIN_X = COLS / 2 - .35;
+  roof.updateMatrixWorld();
+  const gutterC = roof.localToWorld(new THREE.Vector3(0, -.3, -.2));
+  const gutterShape = new THREE.Shape();
+  gutterShape.absarc(0, 0, .17, Math.PI, Math.PI * 2, false);
+  gutterShape.absarc(0, 0, .15, Math.PI * 2, Math.PI, true);
+  {
+    const links = [], top = gutterC.y - .12, n = Math.floor((top - GROUND) / .1);
+    for (let i = 0; i < n; i++) {
+      const t = new THREE.TorusGeometry(.055, .014, 6, 14);
+      if (i % 2) t.rotateY(Math.PI / 2);
+      t.translate(CHAIN_X, top - i * .1, gutterC.z); links.push(t);
+    }
+    const chain = new THREE.Mesh(mergeGeos(links), copperMat); chain.castShadow = true; scene.add(chain);
+    const stoneMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x8d8a84).convertSRGBToLinear(), roughness: .95, envMapIntensity: .3 });
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(.42, .48, .18, 20), stoneMat);              // 雨落ちの受け石
+    basin.position.set(CHAIN_X, GROUND + .09, gutterC.z); basin.receiveShadow = true; scene.add(basin);
+  }
+  // 雨水：瓦の谷を流れて軒樋へ／鎖を伝って落ちる
+  const FLOW_N = 140, CH_N = 40, X_AXIS = new THREE.Vector3(1, 0, 0);
+  const flowSt = Array.from({ length: FLOW_N }, () => ({ alive: false }));
+  const waterMat = new THREE.LineBasicMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0, depthWrite: false });
+  const streakMat = new THREE.MeshBasicMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0, depthWrite: false });
+  const flow = new THREE.InstancedMesh(new THREE.BoxGeometry(.045, .34, .01), streakMat, FLOW_N);
+  flow.frustumCulled = false; roof.add(flow);
+  const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fs = new THREE.Vector3(1, 1, 1), fp = new THREE.Vector3(), HIDE = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < FLOW_N; i++) flow.setMatrixAt(i, HIDE);
+  const chPos = new Float32Array(CH_N * 6);
+  const chGeo = new THREE.BufferGeometry(); chGeo.setAttribute("position", new THREE.BufferAttribute(chPos, 3));
+  const chLines = new THREE.LineSegments(chGeo, waterMat); chLines.frustumCulled = false; scene.add(chLines);
+  for (let i = 0; i < CH_N; i++) chPos[i * 6 + 1] = chPos[i * 6 + 4] = GROUND - 1;
+  function updateWater(dt) {
+    waterMat.opacity = rainAmt * .85; streakMat.opacity = rainAmt * .55;
+    if (rainAmt < .02) { flow.visible = false; return; }
+    flow.visible = true;
+    for (let i = 0; i < FLOW_N; i++) {
+      const s = flowSt[i];
+      if (!s.alive) {
+        flow.setMatrixAt(i, HIDE);
+        if (Math.random() > dt * 4 * rainAmt) continue;
+        const c = Math.floor(Math.random() * COLS);
+        let t = -1; for (let r = 0; r < ROWS; r++) if (board[r][c] && board[r][c].userData.tx !== undefined) t = r;
+        if (t < 0) continue;
+        Object.assign(s, { alive: true, c, y: t + .5 + Math.random() * .5, v: 2 + Math.random() * 1.5, u: Math.random() < .5 ? .2 : .32 });
+      }
+      s.y -= s.v * dt;
+      const r = Math.floor(s.y);
+      if (s.y < 0 || !board[r] || !board[r][s.c]) { s.alive = false; continue; }
+      fp.set(cellX(s.c) + s.u, s.y + .17, BASE_Z + zTop(s.u, s.y - r - .5) + .015);
+      fq.setFromAxisAngle(X_AXIS, SLOPE); fm.compose(fp, fq, fs); flow.setMatrixAt(i, fm);
+    }
+    flow.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < CH_N; i++) {
+      const o = i * 6;
+      if (chPos[o + 1] < GROUND) {
+        if (Math.random() > dt * 30 * rainAmt) continue;
+        const y = gutterC.y - .1 - Math.random() * .3;
+        chPos.set([CHAIN_X + (Math.random() - .5) * .1, y, gutterC.z + (Math.random() - .5) * .1, 0, y + .35, 0], o);
+        chPos[o + 3] = chPos[o]; chPos[o + 5] = chPos[o + 2];
+      }
+      chPos[o + 1] -= 6 * dt; chPos[o + 4] -= 6 * dt;
+    }
+    chGeo.attributes.position.needsUpdate = true;
+  }
+
+
+  // ===== 現場ごとの屋根まわり：野地・瓦桟・破風・軒・棟・軒樋、谷なら下屋、入母屋なら隅の屋根面 =====
+  const siteRoof = new THREE.Group(), siteWorld = new THREE.Group();
+  roof.add(siteRoof); scene.add(siteWorld);
+  const UP_BACK = new THREE.Vector3(0, COS_P, -SIN_P);            // 屋根の座標で「水平に奥へ」
+  const FWD = new THREE.Vector3(0, -COS_P, SIN_P);                 // 屋根の座標で「水平に手前へ」
+  function quadMesh(pts, uvs, mat) {                                // 平らな多角形（扇形に三角形を張る）
+    const pos = [], uv = [], idx = [];
+    pts.forEach((p, i) => { pos.push(p.x, p.y, p.z); uv.push(...uvs[i]); });
+    const nz = new THREE.Vector3().subVectors(pts[1], pts[0]).cross(new THREE.Vector3().subVectors(pts[2], pts[0])).z;
+    for (let i = 1; i < pts.length - 1; i++) nz >= 0 ? idx.push(0, i, i + 1) : idx.push(0, i + 1, i);   // 表を空に向ける
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; return m;
+  }
+  function beam(a, b, r, mat, parent) {                             // aからbへ渡す丸い棟
+    const len = a.distanceTo(b), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 14), mat);
+    m.position.copy(a).add(b).multiplyScalar(.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    m.castShadow = true; parent.add(m); return m;
+  }
+  function box(w, h, d, mat, x, y, z, parent, shadow = true) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); return m;
+  }
+  let ridgeHalf = COLS / 2;
+  function buildSite(key) {
+    for (const grp of [siteRoof, siteWorld]) {
+      grp.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      grp.clear();
+    }
+    const half = COLS / 2, iri = key === "iri", wings = wingsOf(key);
+    const topHalf = iri ? half - HIP_IN : half;
+    ridgeHalf = topHalf;
+    // 野地：屋根の輪郭どおりの板
+    const outline = iri
+      ? [[-half, 0], [half, 0], [topHalf, HIP_TOP], [topHalf, ROWS + .3], [-topHalf, ROWS + .3], [-topHalf, HIP_TOP]]
+      : [[-half, 0], [half, 0], [half, ROWS + .3], [-half, ROWS + .3]];
+    const dg = new THREE.ShapeGeometry(new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y))));   // 入母屋は凹んだ形なので三角分割に任せる
+    const uv = dg.attributes.uv, dp = dg.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (dp.getX(i) + half) / COLS, dp.getY(i) / (ROWS + .3));
+    const deck = new THREE.Mesh(dg, deckMat); deck.receiveShadow = true; siteRoof.add(deck);
+    // 瓦桟（各段の尻の位置）：その段の幅だけ
+    for (let r = 0; r < ROWS; r++) {
+      const row = mask[Math.min(r + 1, ROWS - 1)], lo = row.indexOf(true), hi = row.lastIndexOf(true);
+      box(hi - lo + 1, .08, BASE_Z, battenMat, (lo + hi + 1) / 2 - half, r + 1 + TL_ROW - .05, BASE_Z / 2, siteRoof);
+    }
+    // 破風板（頭は袖瓦の垂れで隠れる）
+    const y0 = iri ? HIP_TOP : -.6;
+    [-1, 1].forEach(s => box(.12, ROWS - y0, .42, bargeMat, s * (topHalf - .06), (ROWS + y0) / 2, -.17, siteRoof));
+    // 軒の広小舞・淀・銅の軒樋（谷の現場は下屋の両脇だけ）
+    let spans = [[-half - .18, half + .18]];
+    for (const [cx, w] of wings) spans = spans.flatMap(([a, b]) => [[a, Math.min(b, cx - w)], [Math.max(a, cx + w), b]]).filter(([a, b]) => b - a > .25);
+    for (const [a, b] of spans) {
+      box(b - a, .16, .35, bargeMat, (a + b) / 2, -.08, -.05, siteRoof, false);
+      box(Math.min(b, half) - Math.max(a, -half), .1, BASE_Z + LIFT, battenMat, (Math.max(a, -half) + Math.min(b, half)) / 2, .12, (BASE_Z + LIFT) / 2, siteRoof, false);
+      const len = b - a + .32, g = new THREE.ExtrudeGeometry(gutterShape, { depth: len, bevelEnabled: false, curveSegments: 12 });
+      g.rotateY(Math.PI / 2); g.translate(-len / 2, 0, 0);
+      const gut = new THREE.Mesh(g, copperMat); gut.position.copy(gutterC); gut.position.x += (a + b) / 2; gut.castShadow = true; siteWorld.add(gut);
+      const lip = new THREE.Mesh(new THREE.CylinderGeometry(.025, .025, len, 8), copperMat);       // 耳（縁の巻き）
+      lip.rotation.z = Math.PI / 2; lip.position.copy(gut.position).add(new THREE.Vector3(0, 0, .17)); siteWorld.add(lip);
+    }
+    // 大棟（のし積み＋冠瓦）と鬼瓦
+    for (let i = 0; i < 3; i++) box(topHalf * 2 + .2, .5, .16, ridgeMat, 0, ROWS + .1, .14 + i * .17, siteRoof);
+    beam(new THREE.Vector3(-topHalf - .15, ROWS + .1, .67), new THREE.Vector3(topHalf + .15, ROWS + .1, .67), .3, ridgeMat, siteRoof);
+    [-1, 1].forEach(s => {
+      box(.5, .9, 1.3, oniMat, s * (topHalf + .3), ROWS + .05, .57, siteRoof);
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(.16, .5, 10), oniMat);
+      horn.position.set(s * (topHalf + .3), ROWS + .05, 1.42); horn.rotation.x = Math.PI / 2; siteRoof.add(horn);
+    });
+    if (iri) {
+      // 入母屋：軒の隅から隅棟が平面45°で妻の足元へ上がり、外側には奥へ流れる隅の屋根面
+      const depth = (ROWS - HIP_TOP) * COS_P, run = half - topHalf;
+      [-1, 1].forEach(s => {
+        const P0 = new THREE.Vector3(s * half, 0, 0), P1 = new THREE.Vector3(s * topHalf, HIP_TOP, 0);
+        const B = P1.clone().addScaledVector(UP_BACK, depth), QB = P0.clone().addScaledVector(UP_BACK, run + depth);
+        siteRoof.add(quadMesh([P0, P1, B, QB], [[0, 0], [run, HIP_TOP], [run + depth, HIP_TOP], [run + depth, 0]], sideTileMat));
+        beam(P0.clone().setZ(.24), P1.clone().setZ(.24), .17, oniMat, siteRoof);              // 隅棟
+        beam(P1.clone().setZ(.2), B.clone().add(new THREE.Vector3(0, 0, .2)), .1, oniMat, siteRoof);       // 妻の足元の水切り
+        box(.36, .5, .5, oniMat, s * (half + .05), -.05, .35, siteRoof);                // 隅鬼
+        box(.06, ROWS - HIP_TOP + .2, .9, plasterMat, s * (topHalf - .02), (ROWS + HIP_TOP) / 2, -.55, siteRoof, false);   // 妻の白壁（破風の下）
+      });
+    }
+    // 下屋：本屋根の正面に切妻の下屋が取り付き、谷（銅板）で納まる
+    const wallMat = wings.length ? new THREE.MeshStandardMaterial({ map: templeTex(), roughness: .9, envMapIntensity: .4 }) : null;
+    for (const [cx, w] of wings) {
+      const LF = 1.6, hr = w * Math.tan(PITCH), top = w / COS_P;
+      const M = new THREE.Vector3(cx, top, 0), F = M.clone().addScaledVector(FWD, w + LF);
+      [-1, 1].forEach(s => {
+        const A = new THREE.Vector3(cx + s * w, 0, 0), Ef = A.clone().addScaledVector(FWD, LF);
+        const face = quadMesh([A, M, F, Ef], [[0, 0], [-w, top], [LF, top], [LF, 0]], sideTileMat);
+        face.position.z += .02; siteRoof.add(face);
+        const v = M.clone().sub(A), len = v.length();
+        const valley = new THREE.Mesh(new THREE.BoxGeometry(.32, len, .02), copperMat);   // 谷板
+        valley.position.copy(A).add(M).multiplyScalar(.5).setZ(.03);
+        valley.rotation.z = Math.atan2(v.y, v.x) - Math.PI / 2; siteRoof.add(valley);
+        beam(A.clone().addScaledVector(FWD, LF).add(new THREE.Vector3(0, 0, .06)), F.clone().add(new THREE.Vector3(0, 0, .06)), .05, bargeMat, siteRoof);   // 破風
+      });
+      beam(M.clone().setZ(.12), F.clone().add(new THREE.Vector3(0, 0, .12)), .17, ridgeMat, siteRoof);   // 下屋の棟
+      const oni = box(.4, .6, .5, oniMat, 0, 0, 0, siteRoof); oni.position.copy(F).add(new THREE.Vector3(0, -.1, .3));
+      // 下屋の壁と、正面の妻壁（ワールド座標）
+      const wingFront = LF - .35;
+      const walls = new THREE.Mesh(new THREE.BoxGeometry(w * 2 - .6, -GROUND, wingFront + .8), wallMat);
+      walls.position.set(cx, GROUND / 2, (wingFront - .8) / 2); walls.receiveShadow = true; siteWorld.add(walls);
+      const gab = new THREE.Shape([new THREE.Vector2(-w + .3, 0), new THREE.Vector2(w - .3, 0), new THREE.Vector2(0, hr - .25)]);
+      const gm = new THREE.Mesh(new THREE.ShapeGeometry(gab), plasterMat); gm.position.set(cx, 0, wingFront); siteWorld.add(gm);
+    }
+  }
+
+  // 同じ色でも焼きムラで1枚ずつ少し違う（色ごとに3通り）
+  const MATS = {}, GHOST = {};
+  for (const k in GLAZE) {
+    const G = GLAZE[k];
+    MATS[k] = [0, 1, 2].map(i => {
+      const col = new THREE.Color(G.color).offsetHSL(0, (i - 1) * .03, (i - 1) * .02).convertSRGBToLinear();   // 色見本どおりの濃さで出す
+      const m = new THREE.MeshPhysicalMaterial({ color: col, metalness: G.metal, roughness: G.rough + (i - 1) * .04, clearcoat: G.cc, clearcoatRoughness: .1, envMapIntensity: .6 });
+      m.userData.rough = m.roughness;
+      return m;
+    });
+    GHOST[k] = new THREE.MeshBasicMaterial({ color: new THREE.Color(G.color).convertSRGBToLinear(), transparent: true, opacity: .28, depthWrite: false });
+  }
+
+  function makeTile(kind, ghost) {
+    const m = new THREE.Mesh(tileGeo, ghost ? GHOST[kind] : MATS[kind][Math.floor(Math.random() * 3)]);
+    if (!ghost) {
+      m.castShadow = true; m.receiveShadow = true;
+      const n = new THREE.Mesh(nailGeo, nailMat); m.add(n);
+    }
+    m.userData.kind = kind;
+    return m;
+  }
+  function place(mesh, c, r, snap) {
+    mesh.userData.tx = cellX(c); mesh.userData.ty = cellY(r);
+    if (r >= 0 && r < ROWS) mesh.geometry = TILE_GEO[geoFor(c, r)];
+    if (snap) mesh.position.set(cellX(c), cellY(r), BASE_Z);
+  }
+
+  // 雨漏りの印としずく
+  const leakMarks = [];
+  for (let i = 0; i < 60; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(.86, .86), new THREE.MeshBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; roof.add(m); leakMarks.push(m);
+  }
+  const dropMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff });
+  const dropGeo = new THREE.SphereGeometry(.06, 8, 6);
+  const drops = [];
+
+  // ===== ゲーム状態 =====
+  let board, piece, ghost, lastKinds = [], nextKind, score = 0, lines = 0, level = 1, state = "title";
+  let site = 0, siteKey = "kiri", siteLines = 0, mask = makeMask("kiri");
+  let soft = false;
+  let fallAcc = 0, lockAcc = 0, lockResets = 0, shake = 0, danger = 0;
+  let cloud = 0, raining = false, rainT = 0, rainAmt = 0, bucket = 0, bucketAtRain = 0, flashT = 0;
+  const sliding = [], flying = [];
+  let best = 0;
+  try { best = +localStorage.getItem("kawara3d-best") || 0; } catch (e) {}
+
+  // 重みつきで選ぶ。同じ束が3回続かないようにする
+  function draw() {
+    const ks = Object.keys(PIECES).filter(k => !(lastKinds[0] === k && lastKinds[1] === k));
+    let r = Math.random() * ks.reduce((a, k) => a + PIECES[k].w, 0), k = ks[0];
+    for (const c of ks) { r -= PIECES[c].w; if (r < 0) { k = c; break; } }
+    lastKinds = [k, lastKinds[0]];
+    return k;
+  }
+
+  function reset() {
+    if (board) board.forEach(row => row.forEach(m => m && roof.remove(m)));
+    if (piece) piece.meshes.forEach(m => roof.remove(m));
+    if (ghost) ghost.forEach(m => roof.remove(m));
+    board = Array.from({ length: H }, () => Array(COLS).fill(null));
+    score = 0; lines = 0; level = 1; lastKinds = []; nextKind = draw();
+    if (site !== 0) goSite(0);
+    siteLines = 0;
+    piece = null; ghost = null;
+    cloud = 0; raining = false; rainT = 0; bucket = 0;
+    hud();
+  }
+  const speed = () => Math.max(70, 800 * Math.pow(.84, level - 1));
+  const cloudRate = () => 100 / Math.max(14, 28 - 2 * (level - 1));   // 雨雲ゲージ（%/秒）
+  const cellsOf = (k, rot, px, py) => ROT[k][rot].map(([x, y]) => [px + x, py + y]);
+  const fits = cells => cells.every(([x, y]) => x >= 0 && x < COLS && y >= 0 && y < H && mask[y][x] && !board[y][x]);
+
+  // 上に瓦があるのに下が空いている所＝雨漏りする穴
+  function holes() {
+    const out = [];
+    for (let x = 0; x < COLS; x++) {
+      let top = -1;
+      for (let y = ROWS - 1; y >= 0; y--) if (board[y][x]) { top = y; break; }
+      for (let y = 0; y < top; y++) if (!board[y][x] && mask[y][x]) out.push([x, y]);
+    }
+    return out;
+  }
+
+  function spawn() {
+    const kind = nextKind; nextKind = draw();
+    const n = BOX[kind], cnt = ROT[kind][0].length;
+    const px = Math.floor((COLS - n) / 2), py = ROWS;
+    if (!fits(cellsOf(kind, 0, px, py))) return gameOver("top");
+    const meshes = Array.from({ length: cnt }, () => { const m = makeTile(kind); roof.add(m); return m; });
+    piece = { kind, rot: 0, px, py, meshes };
+    if (ghost) ghost.forEach(m => roof.remove(m));
+    ghost = Array.from({ length: cnt }, () => { const m = makeTile(kind, true); roof.add(m); return m; });
+    syncPiece(true);
+    pixelEvent("spawn");
+    fallAcc = 0; lockAcc = 0; lockResets = 0;
+    hud();
+  }
+  function syncPiece(snap) {
+    const cells = cellsOf(piece.kind, piece.rot, piece.px, piece.py);
+    cells.forEach(([x, y], i) => place(piece.meshes[i], x, y, snap));
+    let d = 0; while (fits(cellsOf(piece.kind, piece.rot, piece.px, piece.py - d - 1))) d++;
+    cells.forEach(([x, y], i) => { ghost[i].position.set(cellX(x), cellY(y - d), BASE_Z); if (y - d >= 0) ghost[i].geometry = TILE_GEO[geoFor(x, y - d)]; ghost[i].visible = d > 0; });
+  }
+  function tryMove(dx, dy) {
+    if (state !== "play" || !piece) return false;
+    const c = cellsOf(piece.kind, piece.rot, piece.px + dx, piece.py + dy);
+    if (!fits(c)) return false;
+    piece.px += dx; piece.py += dy;
+    if (dx && lockResets < 15) { lockAcc = 0; lockResets++; }
+    syncPiece(); if (dx) sfx("move");
+    return true;
+  }
+  function rotate(dir = 1) {
+    if (state !== "play" || !piece) return;
+    const nr = (piece.rot + (dir > 0 ? 1 : 3)) % 4;
+    for (const [kx, ky] of [[0, 0], [-1, 0], [1, 0], [0, 1], [-2, 0], [2, 0], [0, -1]]) {
+      if (fits(cellsOf(piece.kind, nr, piece.px + kx, piece.py + ky))) {
+        piece.rot = nr; piece.px += kx; piece.py += ky;
+        if (lockResets < 15) { lockAcc = 0; lockResets++; }
+        syncPiece(); sfx("rot"); return;
+      }
+    }
+  }
+  function hardDrop() {
+    if (state !== "play" || !piece) return;
+    let d = 0; while (tryMove(0, -1)) d++;
+    score += d * 2; shake = Math.min(.35, .12 + d * .015);
+    lock();
+  }
+  function lock() {
+    const cells = cellsOf(piece.kind, piece.rot, piece.px, piece.py);
+    cells.forEach(([x, y], i) => { board[y][x] = piece.meshes[i]; });
+    ghost.forEach(m => roof.remove(m)); ghost = null;
+    piece = null;
+    sfx("lock");
+    if (cells.some(([, y]) => y >= ROWS)) return gameOver("top");
+    const full = [];
+    for (let y = 0; y < ROWS; y++) if (mask[y].some(Boolean) && board[y].every((m, x) => m || !mask[y][x])) full.push(y);
+    if (full.length) {
+      full.forEach(y => board[y].forEach((m, x) => m && slide(m, x * 25 + Math.random() * 40)));
+      // 列ごとに、置ける升だけを詰めて下ろす（谷や妻でふさがった升は飛ばす）
+      for (let x = 0; x < COLS; x++) {
+        const slots = []; for (let y = 0; y < H; y++) if (mask[y][x]) slots.push(y);
+        const keep = slots.filter(y => !full.includes(y)).map(y => board[y][x]);
+        slots.forEach((y, i) => { board[y][x] = keep[i] || null; });
+      }
+      board.forEach((row, y) => row.forEach((m, x) => m && place(m, x, y)));
+      lines += full.length; siteLines += full.length;
+      score += [0, 100, 300, 600][full.length] * level;
+      level = 1 + Math.floor(lines / 6);
+      if (!raining) cloud = Math.max(0, cloud - 10 * full.length);   // 葺くほど雨雲が遠のく
+      const [big, small] = LINES[full.length];
+      showPop(big, small);
+      sfx("clear" + full.length);
+      shake = .25 + full.length * .08;
+      pixelEvent("clear", full.length);
+      if (siteLines >= SITE_LINES) { hud(); return siteDone(); }
+    }
+    hud();
+    spawn();
+  }
+
+  // 瓦が屋根を滑り落ちて、軒から落ち、地面で割れる
+  function slide(m, delay = 0) {
+    m.userData.tx = undefined;
+    m.userData.vs = 0; m.userData.delay = delay / 1000; m.userData.vx = (Math.random() - .5) * .8;
+    m.userData.spin = (Math.random() - .5) * 2;
+    sliding.push(m);
+  }
+  function toWorld(m, v) {
+    m.updateMatrixWorld();
+    const p = new THREE.Vector3(), q = new THREE.Quaternion();
+    m.getWorldPosition(p); m.getWorldQuaternion(q);
+    roof.remove(m); scene.add(m);
+    m.position.copy(p); m.quaternion.copy(q);
+    m.userData.v = v;
+    m.userData.w = new THREE.Vector3(Math.random() * 8 - 4, Math.random() * 6 - 3, Math.random() * 8 - 4);
+    m.userData.life = 0; m.userData.bounces = 0;
+    flying.push(m);
+  }
+  let shardCount = 0, lastClack = 0;
+  function shatter(m) {
+    const p = m.position.clone(), mat = m.material;
+    scene.remove(m);
+    const n = shardCount > 160 ? 0 : 3 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) {
+      const s = new THREE.Mesh(shardGeos[Math.floor(Math.random() * shardGeos.length)], mat);
+      s.scale.setScalar(.7 + Math.random() * .4);
+      s.castShadow = true;
+      s.position.copy(p).add(new THREE.Vector3((Math.random() - .5) * .4, .1, (Math.random() - .5) * .4));
+      s.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      s.userData = { v: new THREE.Vector3((Math.random() - .5) * 5, 2 + Math.random() * 3, (Math.random() - .2) * 4), w: new THREE.Vector3(Math.random() * 14 - 7, Math.random() * 14 - 7, Math.random() * 14 - 7), life: 0, bounces: 1, shard: true };
+      scene.add(s); flying.push(s); shardCount++;
+    }
+    const now = performance.now();
+    if (now - lastClack > 35) { lastClack = now; sfx("break"); }
+  }
+
+  function goSite(i) {
+    site = i; siteKey = SITES[i].key; mask = makeMask(siteKey); siteLines = 0;
+    if (board) board.forEach(row => row.forEach(m => m && roof.remove(m)));
+    board = Array.from({ length: H }, () => Array(COLS).fill(null));
+    buildSite(siteKey);
+    if (AW) sizePixel();
+  }
+  function siteDone() {
+    state = "done"; raining = false;
+    const bonus = 2000 * level, done = SITES[site], nx = (site + 1) % SITES.length, N = SITES[nx];
+    score += bonus; hud();
+    showPop("葺き上がり！", `${done.name}の屋根、完成や　+${bonus.toLocaleString()}`);
+    sfx("kane"); pixelEvent("site");
+    setTimeout(() => card(`
+      <h2>${done.name}、葺き上がり</h2>
+      <p>ここまで ${lines}段・${(lines * COLS / TILES_PER_M2).toFixed(1)}㎡</p>
+      <p class="best">次の現場：${N.name}</p>
+      <p>${N.note}</p>
+      <button class="go" id="go" type="button">次の現場へ</button>`, () => { goSite(nx); cloud = 0; bucket = 0; state = "play"; spawn(); }), 1800);
+  }
+  function startRain() {
+    raining = true; rainT = RAIN_SEC; bucketAtRain = bucket;
+    showPop("夕立や！", holes().length ? "隙間から漏るで！" : "隙間なし、どんと来い", true);
+    sfx("thunder"); flashT = .01; leakSaid = false;
+    pixelEvent("rain");
+  }
+  function endRain() {
+    raining = false; cloud = 0;
+    const gained = bucket - bucketAtRain;
+    if (gained < .5) {
+      const dump = Math.min(bucket, BUCKET_DUMP); bucket -= dump;
+      pixelEvent("dry"); sfx("rin"); score += 500 * level; sfx("clear3");
+      showPop("雨漏りゼロ！", `ええ屋根や　+${(500 * level).toLocaleString()}` + (dump >= 1 ? `　バケツ −${Math.round(dump)}%` : ""));
+    }
+    else showPop("雨上がり", `バケツ +${Math.round(gained)}%　隙間を埋めときや`, true);
+    hud();
+  }
+
+  function gameOver(reason) {
+    state = "over"; raining = false;
+    if (piece) { piece.meshes.forEach((m, i) => slide(m, i * 30)); piece = null; }
+    if (ghost) { ghost.forEach(m => roof.remove(m)); ghost = null; }
+    let k = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < COLS; x++) {
+      const m = board[y][x]; if (!m) continue;
+      board[y][x] = null; slide(m, y * 60 + Math.random() * 120 + (k++ % 3) * 10);
+    }
+    sfx("over"); shake = .5;
+    pixelEvent("over", reason);
+    const isBest = score > best;
+    if (isBest) { best = score; try { localStorage.setItem("kawara3d-best", best); } catch (e) {} }
+    const head = reason === "water" ? "バケツがあふれた！" : "棟まで乱れた！";
+    const note = reason === "water" ? "施主さんカンカンや…隙間は雨漏りのもとやで。" : "積み上がりすぎや。";
+    setTimeout(() => card(`
+      <h2>${head}</h2>
+      <p>${note}</p>
+      <div class="result">${score.toLocaleString()}</div>
+      <p>${lines}段葺き上げ・${(lines * COLS / TILES_PER_M2).toFixed(1)}㎡</p>
+      <p class="best">${isBest ? "自己ベスト更新や！" : "自己ベスト " + best.toLocaleString()}</p>
+      <button class="go" id="go" type="button">もう一回葺く</button>`, start), 1400);
+  }
+
+  // ===== 画面まわり =====
+  const $ = id => document.getElementById(id);
+  function hud() {
+    $("score").textContent = score.toLocaleString();
+    $("lv").textContent = SITES[site].name + " " + Math.min(siteLines, SITE_LINES) + "/" + SITE_LINES + "段";
+    $("lines").textContent = "Lv" + level;
+    $("area").textContent = (lines * COLS / TILES_PER_M2).toFixed(1) + "㎡";
+    const k = nextKind, rows = PIECES[k].rows, n = Math.max(...rows.map(r => r.length)), hex = "#" + GLAZE[k].color.toString(16).padStart(6, "0");
+    const grid = $("nextGrid");
+    grid.style.gridTemplateColumns = `repeat(${n}, 8px)`;
+    grid.innerHTML = rows.map(r => [...r.padEnd(n, ".")].map(ch => `<i style="background:${ch === "#" ? hex : "transparent"}"></i>`).join("")).join("");
+    $("nextName").textContent = PIECES[k].name;
+  }
+  function meters() {
+    const cv = raining ? rainT / RAIN_SEC * 100 : cloud;
+    $("cloudBar").style.width = cv + "%";
+    $("cloudLab").textContent = raining ? "夕立中" : "雨雲";
+    $("cloudBox").classList.toggle("warn", !raining && cloud > 75);
+    $("bucketBar").style.width = Math.min(100, bucket) + "%";
+  }
+  function showPop(big, small, rain) {
+    const p = $("pop"); $("popBig").textContent = big; $("popSmall").textContent = small;
+    p.classList.toggle("rain", !!rain);
+    p.classList.remove("show"); void p.offsetWidth; p.classList.add("show");
+  }
+  function card(html, onGo) {
+    $("card").innerHTML = html; $("overlay").hidden = false;
+    $("go").onclick = () => { $("overlay").hidden = true; onGo(); };
+    $("go").focus();
+  }
+  function start() {
+    unlockAudio();
+    reset(); state = "play"; spawn();
+  }
+
+  function fit() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h); camera.aspect = w / h;
+    const center = new THREE.Vector3(0, ROWS / 2 * Math.sin(PITCH), -ROWS / 2 * Math.cos(PITCH));
+    const phi = THREE.MathUtils.degToRad(42);
+    const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const usable = (h - 290) / h;                       // 得点帯・棟の親方・ボタン・地上の若い衆を除いた割合
+    const dH = (ROWS * Math.sin(PITCH + phi) / 2 + 1.1) / (vt * usable);
+    const dW = (COLS / 2 + 2.6) / (vt * camera.aspect);            // 左右に足場と住職のぶんの余白
+    const d = Math.max(dH, dW);
+    camera.position.set(0, center.y + d * Math.sin(phi), center.z + d * Math.cos(phi));
+    camera.lookAt(center);
+    camera.setViewOffset(w, h, 0, -34, w, h);           // 得点帯と棟の親方のぶん屋根を少し下げる
+    camera.updateProjectionMatrix();
+    camera.userData.base = camera.position.clone();
+    sizePixel();
+  }
+  window.addEventListener("resize", fit);
+
+  // ===== ループ =====
+  const clock = new THREE.Clock();
+  const G = new THREE.Vector3(0, -22, 0);
+  let leakList = [], leakSaid = false, perfT = 0, perfN = 0;
+  renderer.setAnimationLoop(() => {
+    const dt = Math.min(.05, clock.getDelta()), ms = dt * 1000;
+    // 重い端末では描画の細かさを少しずつ下げる（2秒ごとに平均を見る）
+    perfT += dt; perfN++;
+    if (perfT > 2) { if (perfT / perfN > 1 / 40 && dpr > 1) { dpr = Math.max(1, dpr - .25); renderer.setPixelRatio(dpr); fit(); } perfT = 0; perfN = 0; }
+    if (state === "play" && piece) {
+      fallAcc += ms * (soft ? 12 : 1);
+      while (fallAcc >= speed()) {
+        fallAcc -= speed();
+        if (tryMove(0, -1)) { if (soft) score += 1; }
+        else break;
+      }
+      if (piece && !fits(cellsOf(piece.kind, piece.rot, piece.px, piece.py - 1))) {
+        lockAcc += ms;
+        if (lockAcc > 450) lock();
+      } else lockAcc = 0;
+    }
+    // 夕立と雨漏り
+    if (state === "play") {
+      leakList = holes();
+      if (!raining) { cloud += cloudRate() * dt; if (cloud >= 100) startRain(); }
+      else {
+        rainT -= dt;
+        bucket += Math.sqrt(leakList.length) * BUCKET_PER_HOLE * dt;
+        if (leakList.length && Math.random() < dt * 6) sfx("drip");
+        if (leakList.length && !leakSaid && rainT < RAIN_SEC - 2) { leakSaid = true; pixelEvent("leak"); }
+        if (Math.random() < dt * .25) { flashT = .01; setTimeout(() => sfx("thunder"), 250); }
+        if (bucket >= 100) { bucket = 100; meters(); return void gameOver("water"); }
+        if (rainT <= 0) endRain();
+      }
+      meters();
+    } else leakList = [];
+    rainAmt += ((raining ? 1 : 0) - rainAmt) * Math.min(1, dt * 1.6);
+
+    // 空と光
+    $("dim").style.opacity = (rainAmt * .85).toFixed(3);
+    hemi.intensity = .45 - rainAmt * .2;
+    sun.intensity = 1.25 - rainAmt * .9;
+    for (const k in MATS) for (const M of MATS[k]) { M.envMapIntensity = .6 - rainAmt * .25; M.roughness = M.userData.rough * (1 - rainAmt * .55); }
+    if (flashT > 0) { $("flash").classList.add("on"); hemi.intensity += 1.2; flashT -= dt; if (flashT <= 0) $("flash").classList.remove("on"); }
+    rainMat.opacity = rainAmt * .55;
+    if (rainAmt > .01) {
+      for (let i = 0; i < RAIN_N; i++) {
+        const o = i * 6, dy = 30 * dt;
+        rainPos[o + 1] -= dy; rainPos[o + 4] -= dy; rainPos[o] += 2 * dt; rainPos[o + 3] += 2 * dt;
+        if (rainPos[o + 1] < GROUND) resetDrop(i, false);
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+    if (rainGain) rainGain.gain.value = rainAmt * .09;
+    if (rainAmt > .15 && Math.random() < dt * 40 * rainAmt) sfx("patter");
+
+    // 雨漏りの印（雨雲が近い時から予告）
+    const showLeaks = state === "play" && (raining || cloud > 70);
+    const pulse = .35 + .25 * Math.sin(performance.now() / 140);
+    leakMarks.forEach((m, i) => {
+      const h = leakList[i];
+      if (showLeaks && h) { m.visible = true; m.position.set(cellX(h[0]), cellY(h[1]), BASE_Z + .01); m.material.opacity = raining ? pulse + .2 : pulse * .6; }
+      else m.visible = false;
+    });
+    if (raining) leakList.forEach(([x, y]) => {
+      if (Math.random() < dt * 9) {
+        const d = new THREE.Mesh(dropGeo, dropMat);
+        d.position.set(cellX(x) + (Math.random() - .5) * .5, cellY(y) + .45, .35);
+        d.userData.life = 0; roof.add(d); drops.push(d);
+      }
+    });
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i]; d.userData.life += dt;
+      d.position.y -= dt * 1.2; d.position.z -= dt * 1.6;
+      if (d.userData.life > .45) { roof.remove(d); drops.splice(i, 1); }
+    }
+
+    updateWater(dt);
+    // なめらかに追従
+    const a = 1 - Math.exp(-dt * 28);
+    roof.children.forEach(m => {
+      if (m.userData.tx === undefined) return;
+      m.position.x += (m.userData.tx - m.position.x) * a;
+      m.position.y += (m.userData.ty - m.position.y) * a;
+      m.position.z += (BASE_Z - m.position.z) * a;
+    });
+    // 屋根を滑り落ちる瓦
+    for (let i = sliding.length - 1; i >= 0; i--) {
+      const m = sliding[i], u = m.userData;
+      if ((u.delay -= dt) > 0) { m.position.z = BASE_Z + Math.random() * .03; continue; }   // 崩れる前の震え
+      u.vs += 11 * dt;
+      m.position.y -= u.vs * dt; m.position.x += u.vx * dt; m.position.z = BASE_Z + .1;
+      m.rotation.z += u.spin * dt;
+      if (m.position.y < -.3) {
+        sliding.splice(i, 1);
+        toWorld(m, DOWN_SLOPE.clone().multiplyScalar(u.vs).add(new THREE.Vector3(u.vx, .8, 0)));
+      }
+    }
+    // 宙を舞う瓦と破片
+    for (let i = flying.length - 1; i >= 0; i--) {
+      const m = flying[i], u = m.userData;
+      u.life += dt;
+      if (u.resting) {
+        if (u.life > 5) { m.position.y -= dt * .25; if (u.life > 7) { scene.remove(m); flying.splice(i, 1); if (u.shard) shardCount--; } }
+        continue;
+      }
+      u.v.addScaledVector(G, dt); m.position.addScaledVector(u.v, dt);
+      m.rotation.x += u.w.x * dt; m.rotation.y += u.w.y * dt; m.rotation.z += u.w.z * dt;
+      if (m.position.y < GROUND + .04 && u.v.y < 0) {
+        if (!u.shard && u.v.length() > 4) { flying.splice(i, 1); shatter(m); continue; }
+        m.position.y = GROUND + .04;
+        u.v.y *= -.25; u.v.x *= .5; u.v.z *= .5; u.w.multiplyScalar(.4);
+        if (++u.bounces > 3 || Math.abs(u.v.y) < .6) { u.resting = true; m.rotation.x = -Math.PI / 2 + (Math.random() - .5) * .3; }
+      }
+    }
+    // 棟が危ない時は赤く光る
+    let top = 0;
+    if (board) for (let y = 0; y < ROWS; y++) if (board[y].some(Boolean)) top = y + 1;
+    const want = state === "play" && top >= ROWS - 3 ? 1 : 0;
+    danger += (want - danger) * a * .3;
+    ridgeMat.emissive.setRGB(danger * (.5 + .5 * Math.sin(performance.now() / 120)) * .8, 0, 0);
+    // 画面揺れ
+    if (camera.userData.base) {
+      camera.position.copy(camera.userData.base);
+      if (shake > .001) { camera.position.x += (Math.random() - .5) * shake; camera.position.y += (Math.random() - .5) * shake; shake *= Math.pow(.02, dt); }
+    }
+    renderer.render(scene, camera);
+    drawPixel(dt);
+  });
+
+  // ===== 音 =====
+  let ac = null, rainGain = null, master = null, reverb = null, muted = false;
+  try { muted = localStorage.getItem("kawara3d-mute") === "1"; } catch (e) {}
+  function noiseBuf(sec) {
+    const len = Math.floor(ac.sampleRate * sec), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  function unlockAudio() {
+    try {
+      if (!ac) {
+        try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}   // iPhoneのマナースイッチ中でも鳴らす
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        initGraph();
+      }
+      ac.resume();
+    } catch (e) {}
+  }
+  function initGraph() {
+    master = ac.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ac.destination);
+    // 境内の残響：石畳と本堂の壁に返る2.6秒ほどの響きをノイズの減衰で作る
+    const ir = ac.createBuffer(2, Math.floor(ac.sampleRate * 2.6), ac.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) { const t = i / ac.sampleRate; d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 2.4) * (t < .012 ? t / .012 : 1); } }
+    const conv = ac.createConvolver(); conv.buffer = ir;
+    const tone2 = ac.createBiquadFilter(); tone2.type = "lowpass"; tone2.frequency.value = 4200;
+    reverb = ac.createGain(); reverb.gain.value = .55; reverb.connect(conv).connect(tone2).connect(master);
+    // 雨：瓦を叩くザーッという音（高めの帯域）と、遠くのサーッという低い帯域を重ねる
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), f2 = ac.createBiquadFilter();
+    s.buffer = noiseBuf(3); s.loop = true;
+    f.type = "bandpass"; f.frequency.value = 3200; f.Q.value = .5;
+    f2.type = "lowpass"; f2.frequency.value = 700;
+    rainGain = ac.createGain(); rainGain.gain.value = 0;
+    const low = ac.createGain(); low.gain.value = .9;
+    s.connect(f).connect(rainGain); s.connect(f2).connect(low).connect(rainGain);
+    rainGain.connect(master); s.start();
+  }
+  function tone(f, t0, dur, type, vol, f2, wet = 0) {
+    const o = ac.createOscillator(), g = ac.createGain(), n = ac.currentTime + t0;
+    o.type = type; o.frequency.setValueAtTime(f, n); if (f2) o.frequency.exponentialRampToValueAtTime(f2, n + dur);
+    g.gain.setValueAtTime(vol, n); g.gain.exponentialRampToValueAtTime(.001, n + dur);
+    o.connect(g); out(g, wet); o.start(n); o.stop(n + dur + .02);
+  }
+  function burst(dur, type, freq, q, vol, decay = 3, t0 = 0, wet = 0) {
+    const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.value = vol;
+    s.buffer = buf; s.connect(f).connect(g); out(g, wet); s.start(ac.currentTime + t0);
+  }
+  // 直接音と残響への送りを分ける（wet = 残響の量）
+  function out(node, wet) {
+    node.connect(master);
+    if (wet && reverb) { const w = ac.createGain(); w.gain.value = wet; node.connect(w).connect(reverb); }
+  }
+  // 打ち物（鐘・りん・拍子木）：振動の型ごとに [周波数比, 強さ, 減衰秒] を与える。
+  // 本物の鐘は型がわずかに2つに割れていて「うなり（ワーンワーン）」が出るので、少しずらした対を重ねる
+  function modal(f, modes, vol, t0 = 0, beat = 0, wet = .5) {
+    const n = ac.currentTime + t0, bus = ac.createGain(); bus.gain.value = vol; out(bus, wet);
+    modes.forEach(([m, a, dec]) => {
+      [0, 1].forEach(j => {
+        if (j && !beat) return;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * m + (j ? beat * Math.sqrt(m) : 0);
+        g.gain.setValueAtTime(0, n); g.gain.linearRampToValueAtTime(a * (beat ? .55 : 1), n + .004);
+        g.gain.setTargetAtTime(0, n + .004, dec / 4.6);
+        o.connect(g).connect(bus); o.start(n); o.stop(n + dec + .1);
+      });
+    });
+  }
+  // 雷：最初の「バリッ」と、強弱が揺れながら長く続く「ゴロゴロ」（ブラウンノイズ）
+  function thunder(vol) {
+    const sec = 4.5, len = Math.floor(ac.sampleRate * sec), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    const swells = Array.from({ length: 5 }, () => [Math.random() * sec * .7, .25 + Math.random() * .7]);
+    let b = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / ac.sampleRate; b = (b + (Math.random() * 2 - 1) * .06) * .985;
+      let env = Math.exp(-t * .9) * .35; for (const [c, a] of swells) env += a * Math.exp(-((t - c) ** 2) / .12);
+      d[i] = b * env * Math.min(1, t / .05) * Math.min(1, (sec - t) / .8);
+    }
+    let pk = 1e-6; for (let i = 0; i < len; i++) pk = Math.max(pk, Math.abs(d[i]));
+    for (let i = 0; i < len; i++) d[i] /= pk;                 // 毎回の大きさをそろえる
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = "lowpass"; f.frequency.value = 320; g.gain.value = vol * .5;
+    s.buffer = buf; s.connect(f).connect(g); out(g, .6); s.start();
+    burst(.35, "highpass", 1500, .5, vol * .3, 5, 0, .6);    // バリッ
+  }
+  // 拍子木：堅い木を打ち合わせた「カーン」
+  function hyoshigi(t0, vol) {
+    modal(1750 + Math.random() * 40, [[1, 1, .16], [2.62, .4, .07], [4.1, .2, .04]], vol, t0, 0, .7);
+    burst(.012, "highpass", 2500, .7, vol * .8, 2, t0, .5);
+  }
+  // 瓦どうしが擦れて収まる「クシャッ」：短いノイズの粒を重ねる（鈴のような響きは残さない）
+  function crunch(vol, grains = 6, lo = 1400, hi = 3800, t0 = 0) {
+    for (let i = 0; i < grains; i++) burst(.015 + Math.random() * .025, "bandpass", lo + Math.random() * (hi - lo), 1.1, vol * (1 - i / (grains + 2)), 4, t0 + i * .011 + Math.random() * .007);
+    burst(.07, "lowpass", 280, .7, vol * 1.6, 3, t0);
+  }
+  // 荷揚げ機の滑車：ロープが擦れる音の上に、溝車が「カラカラ」と回る粒を速さに合わせて刻む
+  function pulley(dur, vol) {
+    burst(dur, "bandpass", 1100, .8, vol * .35, .4);
+    for (let t = 0, i = 0; t < dur - .05; i++) {
+      burst(.012, "bandpass", 2300 + Math.random() * 500, 3, vol * (.7 + Math.random() * .3), 5, t);
+      if (i % 3 === 0) tone(620 + Math.random() * 60, t, .03, "triangle", vol * .12);
+      t += Math.max(.045, .11 - t * .12);      // 回りはじめはゆっくり、すぐ一定の速さに
+    }
+  }
+  function setMute(m) {
+    muted = m; $("mute").textContent = m ? "×" : "♪"; $("mute").setAttribute("aria-label", m ? "音を出す" : "音を消す");
+    if (master) master.gain.value = m ? 0 : 1;
+    try { localStorage.setItem("kawara3d-mute", m ? "1" : "0"); } catch (e) {}
+  }
+  $("mute").addEventListener("click", e => { e.stopPropagation(); unlockAudio(); setMute(!muted); });
+  $("mute").addEventListener("pointerdown", e => e.stopPropagation());
+  window.addEventListener("pointerdown", unlockAudio);
+  setMute(muted);
+  function sfx(k) {
+    if (!ac) return;
+    try {
+      if (k === "move") burst(.035, "bandpass", 2200, 1.5, .09, 3);                         // 瓦を少しずらす「スッ」
+      else if (k === "rot") { burst(.05, "bandpass", 1700, 1.2, .1, 2.5); crunch(.06, 2, 1800, 3000, .03); }   // 手の中で持ち替える
+      else if (k === "lock") { crunch(.3); tone(140, 0, .08, "sine", .18, 85); }
+      else if (k === "break") { crunch(.38, 12, 1200, 4500); crunch(.22, 6, 1500, 4000, .07); }
+      else if (k === "winch") pulley(1.05, .2);
+      else if (k === "lower") pulley(.65, .12);
+      else if (k === "grab") crunch(.14, 3, 1200, 2600);
+      else if (k === "place") { crunch(.2, 5, 1100, 3000); }
+      else if (k === "door") {                                                              // 板戸が敷居を滑る「ゴロゴロ…トン」
+        burst(.5, "bandpass", 380, .9, .22, .6, 0, .25);
+        for (let t = 0; t < .45; t += .03 + Math.random() * .03) burst(.02, "bandpass", 260 + Math.random() * 300, 2, .16, 3, t, .25);
+        burst(.06, "lowpass", 300, .8, .45, 3, .5, .35); tone(190, .5, .09, "sine", .14, 150, .3);
+      }
+      else if (k === "rin") {                                                               // りん：澄んだ「チーン」とゆっくりした「うなり」
+        modal(1180, [[1, 1, 6], [2.74, .5, 3], [5.15, .28, 1.6], [8.3, .12, .7]], .06, 0, 2.2, .45);
+        burst(.008, "highpass", 4000, .7, .12, 2);
+      }
+      else if (k === "kane") {                                                              // 梵鐘：撞木の「ドン」のあと、うなりながら長く残る「ゴーン」
+        burst(.12, "lowpass", 180, .8, 1.1, 2, 0, .4); tone(70, 0, .25, "sine", .35, 55, .3);
+        modal(128, [[.5, .55, 10], [1, 1, 7.5], [1.41, .5, 5], [2.0, .55, 4], [2.71, .4, 2.6], [3.42, .3, 1.8], [4.66, .2, 1.1], [6.1, .12, .7]], .16, .01, .9, .55);
+      }
+      else if (k === "blip") tone(240 + Math.random() * 40, 0, .035, "square", .02);
+      else if (k === "drip") {                                                              // 水滴がバケツに落ちる「ポチャ」：音が上へすべる
+        const f = 900 + Math.random() * 500; tone(f, 0, .07, "sine", .09, f * 2.1, .2); burst(.006, "highpass", 3000, .7, .05, 2);
+      }
+      else if (k === "patter") burst(.01, "bandpass", 2500 + Math.random() * 3500, 2, .03 + Math.random() * .05, 4);   // 瓦に当たる雨粒
+      else if (k === "thunder") thunder(1);
+      else if (k.startsWith("clear")) {                                                     // 段がそろうと拍子木。そろった段の数だけ打つ
+        const n = +k.slice(5);
+        for (let i = 0; i < Math.min(n, 3); i++) hyoshigi(i * .17, .22 + i * .03);
+      }
+      else if (k === "over") {                                                              // 崩れたあとに遠くの鐘がひとつ
+        modal(110, [[.5, .5, 7], [1, 1, 5.5], [1.41, .45, 3.5], [2.0, .4, 2.6], [2.71, .3, 1.8], [4.66, .12, .8]], .09, .6, .7, .8);
+      }
+    } catch (e) {}
+  }
+
+  // ===== 操作 =====
+  const hold = (id, fn) => {
+    const b = $(id); let t = null, r = null;
+    const stop = () => { clearTimeout(t); clearInterval(r); };
+    b.addEventListener("pointerdown", e => { e.preventDefault(); fn(); t = setTimeout(() => { r = setInterval(fn, 70); }, 220); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(ev => b.addEventListener(ev, stop));
+  };
+  hold("bL", () => tryMove(-1, 0));
+  hold("bR", () => tryMove(1, 0));
+  $("bRot").addEventListener("pointerdown", e => { e.preventDefault(); rotate(1); });
+  $("bDrop").addEventListener("pointerdown", e => { e.preventDefault(); hardDrop(); });
+
+  // 画面をなぞって操作：左右になぞる＝移動、タップ＝回転、下にはじく＝落とす
+  const cvs = renderer.domElement;
+  let g0 = null;
+  cvs.addEventListener("pointerdown", e => { g0 = { x: e.clientX, y: e.clientY, t: performance.now(), mx: 0, moved: false }; });
+  cvs.addEventListener("pointermove", e => {
+    if (!g0 || state !== "play") return;
+    const dx = e.clientX - g0.x, dy = e.clientY - g0.y, step = 26;
+    while (dx - g0.mx * step > step) { tryMove(1, 0); g0.mx++; g0.moved = true; }
+    while (dx - g0.mx * step < -step) { tryMove(-1, 0); g0.mx--; g0.moved = true; }
+    const vy = dy / Math.max(1, performance.now() - g0.t);
+    if (dy > 30 && vy < .6) { soft = true; g0.moved = true; }
+  });
+  const end = e => {
+    if (!g0) return;
+    const dt = performance.now() - g0.t, dx = e.clientX - g0.x, dy = e.clientY - g0.y;
+    if (state === "play") {
+      if (dy > 60 && dy / dt > .6 && Math.abs(dx) < dy) hardDrop();
+      else if (!g0.moved && Math.abs(dx) < 10 && Math.abs(dy) < 10 && dt < 300) rotate(1);
+    }
+    soft = false; g0 = null;
+  };
+  cvs.addEventListener("pointerup", end);
+  cvs.addEventListener("pointercancel", () => { soft = false; g0 = null; });
+
+  document.addEventListener("keydown", e => {
+    const k = e.key;
+    if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " "].includes(k)) e.preventDefault();
+    if (state !== "play") return;
+    if (k === "ArrowLeft") tryMove(-1, 0);
+    else if (k === "ArrowRight") tryMove(1, 0);
+    else if (k === "ArrowUp" || k === "x" || k === "X") rotate(1);
+    else if (k === "z" || k === "Z") rotate(-1);
+    else if (k === "ArrowDown") soft = true;
+    else if (k === " ") hardDrop();
+    else if (k === "p" || k === "P" || k === "Escape") pauseGame();
+  });
+  document.addEventListener("keyup", e => { if (e.key === "ArrowDown") soft = false; });
+  function pauseGame() {
+    if (state !== "play") return;
+    state = "pause";
+    card(`<h2>一服中</h2><p>お茶でも飲んで、また続きを。</p><button class="go" id="go" type="button">続ける</button>`, () => { state = "play"; });
+  }
+  document.addEventListener("visibilitychange", () => { if (document.hidden) pauseGame(); });
+
+  // ===== ドット絵：境内の背景・職人と荷揚げ機・住職 =====
+  const bgCv = $("bg"), pxCv = $("px"), bgx = bgCv.getContext("2d"), pxx = pxCv.getContext("2d");
+  let PS = 3, AW = 0, AH = 0;                                          // 1ドット＝PS（CSS px）
+  const _v = new THREE.Vector3();
+  function scr(x, y, z, local) {                                       // 3Dの点 → ドット座標
+    _v.set(x, y, z); if (local) roof.localToWorld(_v);
+    _v.project(camera);
+    return [Math.round((_v.x + 1) / 2 * AW), Math.round((1 - _v.y) / 2 * AH)];
+  }
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  const PAL = {
+    h: "#f2f0e8", s: "#e8b07a", e: "#2a1a10", n: "#27407a", p: "#6f7a8c", b: "#1e1e24", r: "#c23b2b",
+    k: "#2a2a33", g: "#d0a53c", w: "#f4f4f4", z: "#8a5a2b",
+  };
+  const SPR = {};
+  function sprite(name, rows) {
+    const h = rows.length, w = rows[0].length;
+    for (const flip of [0, 1]) {
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d");
+      rows.forEach((row, y) => [...row].forEach((ch, x) => { if (PAL[ch]) { g.fillStyle = PAL[ch]; g.fillRect(flip ? w - 1 - x : x, y, 1, 1); } }));
+      SPR[name + (flip ? "<" : ">")] = c;
+    }
+  }
+  const W_TOP = ["..hhhh..", ".hrhhhh.", "..sssse.", "..ssss..", "...ss...", ".nnnnnn.", "snnnnnns", "s.nnnn.s", "..pppp.."];
+  const W_UP = ["..hhhh..", ".hrhhhh.", "s.sssse.s".slice(0, 8), "s.ssss.s", "s..ss..s", "snnnnnns", ".nnnnnn.", "..nnnn..", "..pppp.."];
+  const LEG = { i: [".pppppp.", ".pp..pp.", ".bb..bb."], a: [".pppppp.", "pp....pp", "bb....bb"], b: ["..pppp..", "..pppp..", "..bbbb.."] };
+  sprite("wI", [...W_TOP, ...LEG.i]); sprite("wA", [...W_TOP, ...LEG.a]); sprite("wB", [...W_TOP, ...LEG.b]);
+  sprite("wU", [...W_UP, ...LEG.i]); sprite("wUA", [...W_UP, ...LEG.a]); sprite("wUB", [...W_UP, ...LEG.b]);
+  sprite("wC", ["..hhhh..", ".hrhhhh.", "..sssse.", "..ssss..", ".nnnnnn.", ".nnnnnss", ".pppppp.", "pp....pp", "bb....bb"]);   // しゃがんで置く
+  const P_HEAD = ["..ssss..", ".ssssss.", ".ssssse.", ".ssssss.", "..ssss.."], P_UP = ["..ssss..", ".ssssse.", ".ssssss.", ".ssssss.", "..ssss.."];
+  const P_BODY = [".kkkkgk.", "kkkkgkkk", "kkkgkkkk", "kkgkkkkk", ".kkkkkk.", ".kkkkkk.", ".kkkkkk."];
+  const P_GASSHO = [".kkkkgk.", "kkkkgkss", "kkkgkkss", "kkgkkkkk", ".kkkkkk.", ".kkkkkk.", ".kkkkkk."];
+  sprite("pA", [...P_HEAD, ...P_BODY, "..w..w.."]); sprite("pB", [...P_HEAD, ...P_BODY, ".w....w."]);
+  sprite("pU", [...P_UP, ...P_BODY, "..w..w.."]); sprite("pG", [...P_UP, ...P_GASSHO, "..w..w.."]);
+  const put = (name, x, y, dir) => { const c = SPR[name + (dir < 0 ? "<" : ">")]; pxx.drawImage(c, Math.round(x - c.width / 2), Math.round(y - c.height)); };
+  const dot = (g, col, x, y, w = 1, h = 1) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), w, h); };
+  function line(g, col, [x0, y0], [x1, y1], step = 1, cb) {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+    for (let i = 0; i <= n; i += step) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; cb ? cb(x, y, i / n) : dot(g, col, x, y); }
+  }
+
+  // --- 背景（白砂の境内・築地塀・松・苔と石・石灯籠）---
+  function drawBg() {
+    const g = bgx, R = rng(7);
+    g.fillStyle = "#ddd5c2"; g.fillRect(0, 0, AW, AH);
+    for (let y = 2; y < AH; y += 3) for (let x = 0; x < AW; x++) dot(g, "#cbc1aa", x, y + Math.round(Math.sin(x / 7 + y) * .7));   // 砂紋
+    for (let i = 0; i < AW * AH / 40; i++) dot(g, R() < .5 ? "#e9e3d3" : "#c4b9a1", R() * AW, R() * AH);
+    // 苔の島と石（まわりの砂紋は輪に引く）
+    const islands = [[AW * .04, AH * .5, 12, 7], [AW * .97, AH * .45, 10, 6], [AW * .5, AH * .97, 16, 6]];
+    for (const [cx, cy, rx, ry] of islands) {
+      for (let k = 4; k >= 1; k--) for (let a = 0; a < Math.PI * 2; a += .03) dot(g, k % 2 ? "#ddd5c2" : "#c6bca5", cx + Math.cos(a) * (rx + k * 2), cy + Math.sin(a) * (ry + k * 2));
+      for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) {
+        if ((x * x) / (rx * rx) + (y * y) / (ry * ry) > 1) continue;
+        dot(g, (x + y * 3 + Math.floor(R() * 3)) % 4 ? "#5d7d37" : "#4a6a2b", cx + x, cy + y);
+      }
+      const sx = cx - rx * .3, sy = cy - 1;                                  // 石
+      for (let y = -3; y <= 2; y++) for (let x = -4; x <= 4; x++) if (x * x / 16 + y * y / 9 <= 1) dot(g, y < -1 ? "#a8a59e" : x > 1 ? "#6d6a64" : "#8a8780", sx + x, sy + y);
+    }
+    // 築地塀（五本の定規筋＝格の高いお寺の印）と、塀越しの木立
+    const wt = Math.round(AH * .045);
+    for (let y = 0; y < wt; y++) for (let x = 0; x < AW; x++) dot(g, (x * 7 + y * 3 + Math.floor(R() * 4)) % 5 ? "#2f4a2a" : "#3f6236", x, y);
+    g.fillStyle = "#454a52"; g.fillRect(0, wt, AW, 2); g.fillStyle = "#6c727b"; g.fillRect(0, wt, AW, 1);
+    g.fillStyle = "#e6d39c"; g.fillRect(0, wt + 2, AW, 9);
+    g.fillStyle = "#fbf4dc"; for (let i = 0; i < 5; i++) g.fillRect(0, wt + 3 + i * 2 - (i > 2 ? 0 : 0), AW, 1);
+    g.fillStyle = "#8d877b"; g.fillRect(0, wt + 11, AW, 2);
+    g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(0, wt + 13, AW, 2);
+    // 松（左上）と石灯籠（右）
+    const pine = (x0, y0) => {
+      for (let y = 0; y < 14; y++) dot(g, "#5a3a22", x0 + Math.round(Math.sin(y / 3) * 1.5), y0 - y, 2, 1);
+      for (const [dx, dy, r] of [[-5, -14, 5], [4, -11, 4], [-1, -19, 4], [6, -17, 3]])
+        for (let y = -r; y <= Math.ceil(r * .5); y++) for (let x = -r; x <= r; x++) if (x * x + y * y * 3 <= r * r) dot(g, y < -r / 3 ? "#3f6a34" : "#2c4d27", x0 + dx + x, y0 + dy + y);
+    };
+    pine(Math.round(AW * .93), Math.round(AH * .32));
+    const lan = (x0, y0) => {
+      const S = ["..sss..", ".sssss.", "sssssss", "..shs..", "..sss..", ".sssss.", "...s...", "...s...", "..sss..", ".sssss."];
+      S.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== ".") dot(g, ch === "h" ? "#ffe9a8" : x < 3 ? "#a19d95" : "#7b776f", x0 + x - 3, y0 + y - S.length); }));
+      g.fillStyle = "rgba(0,0,0,.15)"; g.fillRect(x0 - 3, y0, 8, 1);
+    };
+    lan(Math.round(AW * .95), Math.round(AH * .62));
+  }
+
+  // --- 本堂の壁（白壁・柱・長押・腰板）を3Dの壁に貼る ---
+  function templeTex() {
+    const c = document.createElement("canvas"); c.width = 64; c.height = 32;
+    const g = c.getContext("2d");
+    g.fillStyle = "#efe9dc"; g.fillRect(0, 0, 64, 32);
+    g.fillStyle = "#5a3d27"; g.fillRect(0, 5, 64, 2); g.fillRect(0, 21, 64, 2);
+    for (let x = 0; x < 64; x += 16) g.fillRect(x, 0, 2, 32);
+    g.fillStyle = "#6b4a30"; g.fillRect(0, 23, 64, 9);
+    g.fillStyle = "#553a25"; for (let x = 1; x < 64; x += 4) g.fillRect(x, 23, 1, 9);
+    const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+
+  // --- 職人2人と荷揚げ機 ---
+  const crew = {
+    a: { x: 0, dir: 1, carry: false, t: 0, mode: "toPile", cheer: 0 },          // 地上で瓦を運ぶ若い衆
+    b: { cheer: 0, x: -COLS / 2 + .3, dir: 1, mode: "toHoist", carry: null, place: 0 },   // 棟の上で受け取って置く親方
+    car: { t: 0, mode: "load", kind: null },                                     // 荷台（0＝下、1＝棟）
+  };
+  const priest = { mode: "hidden", x: 0, t: 0, door: 0, say: "", sayT: 0, cool: 0, queue: null };
+  function pixelEvent(type, n) {
+    if (type === "spawn") { const b = crew.b; if (b.carry) { b.carry = null; b.place = .35; sfx("place"); } b.mode = "toHoist"; }
+    if (type === "clear") { crew.a.cheer = crew.b.cheer = .9; if (n >= 3) sfx("kane"); if (n >= 2) priestSay(n >= 3 ? "三段いっぺん…ありがたや" : "ほう、ええ手際どすなぁ"); }
+    if (type === "site") { crew.a.cheer = crew.b.cheer = 1.6; priestSay("ええ屋根になりましたなぁ", true); }
+    if (type === "rain") priestSay("降ってきましたなぁ", true);
+    if (type === "leak") priestSay("本堂に雨漏りが…！", true);
+    if (type === "dry") priestSay("雨漏りなし、ありがたや", true);
+    if (type === "over") { crew.a.cheer = crew.b.cheer = -3; priestSay(n === "water" ? "本堂が水浸しや…" : "あらら、崩れてしもた", true); }
+    if (type === "title") priestSay("ええ瓦どすなぁ");
+  }
+  function priestSay(text, force) {
+    if (!force && priest.cool > 0) return;
+    priest.queue = text; priest.cool = 7;
+    if (priest.mode === "hidden" || priest.mode === "close") { priest.mode = "open"; priest.t = 0; }
+    else if (priest.mode === "look" || priest.mode === "back") { priest.mode = "look"; priest.t = 0; priest.say = text; priest.queue = null; priest.shown = 0; }
+  }
+  let pxT = 0;
+  const bubble = $("bubble");
+  function drawPixel(dt) {
+    pxT += dt;
+    const g = pxx; g.clearRect(0, 0, AW, AH);
+    const step = Math.floor(pxT * 8) % 2;
+    // 荷揚げ機のレール（地上から、左の破風の外を通って棟まで）
+    const L = -ridgeHalf - .55, top = scr(L, ROWS - .6, .5, true);
+    const foot = scr(-COLS / 2 - .9, GROUND, -1.2);
+    const railBot = [Math.max(14, foot[0] + 3), foot[1]], railTop = [Math.max(14, top[0] + 1), top[1]];
+    const along = (t, off) => [railBot[0] + (railTop[0] - railBot[0]) * t + off, railBot[1] + (railTop[1] - railBot[1]) * t];
+    // 足場：レールに沿って単管を2本、足場板を渡す
+    for (const off of [-5, -11]) line(g, "", along(0, off), along(1, off), 1, (x, y) => { dot(g, "#8d96a1", x, y); dot(g, "#c3cad2", x + 1, y); });
+    for (let t = 1; t > 0; t -= 12 / (railBot[1] - railTop[1])) { const [x, y] = along(t, -12); dot(g, "#c9a36a", x, y + 2, 9, 1); dot(g, "#8c6c42", x, y + 3, 9, 1); }
+    line(g, "#b9c2cc", railBot, railTop, 1, (x, y) => { dot(g, "#7d8792", x - 1, y); dot(g, "#cfd6de", x + 1, y); });
+    line(g, "", railBot, railTop, 4, (x, y) => dot(g, "#9aa3ad", x - 1, y, 3, 1));
+    dot(g, "#e2a31b", railBot[0] - 3, railBot[1] - 4, 6, 4); dot(g, "#8a5a10", railBot[0] - 3, railBot[1] - 1, 6, 1);   // 巻き上げ機
+    const pile = [Math.max(5, railBot[0] - 16), railBot[1]];
+    // 荷台
+    const car = crew.car;
+    if (car.mode === "up") { car.t = Math.min(1, car.t + dt / 1.1); if (car.t >= 1) car.mode = "wait"; }
+    if (car.mode === "down") { car.t = Math.max(0, car.t - dt / .7); if (car.t <= 0) car.mode = "load"; }
+    const cx = railBot[0] + (railTop[0] - railBot[0]) * car.t, cy = railBot[1] + (railTop[1] - railBot[1]) * car.t;
+    dot(g, "#5b636d", cx - 3, cy - 1, 7, 2);
+    const tileCol = k => "#" + new THREE.Color(GLAZE[k].color).getHexString();
+    if (car.kind) { dot(g, tileCol(car.kind), cx - 3, cy - 4, 7, 3); dot(g, "rgba(255,255,255,.5)", cx - 2, cy - 4, 5, 1); }
+    // 若い衆：瓦の山から荷台へ運ぶ
+    const a = crew.a, px0 = pile[0] + 5, px1 = railBot[0] - 5;
+    if (!a.init) { a.x = px1; a.init = true; }
+    const pk = nextKind || "san";
+    for (let i = 0; i < 3; i++) { dot(g, "#7a5a3a", pile[0] - 4, pile[1] - 1, 9, 1); dot(g, i % 2 ? "#8e959c" : "#30363d", pile[0] - 4 + i, pile[1] - 3 - i * 2, 8 - i * 2, 2); }   // 瓦の山
+    let wframe = "wI";
+    if (a.cheer < 0) { wframe = step ? "wU" : "wI"; }
+    else if (a.cheer > 0) { a.cheer -= dt; wframe = "wU"; }
+    else if (car.mode === "load" || (car.mode !== "load" && a.carry)) {
+      const target = a.carry ? px1 : px0, d = target - a.x;
+      if (Math.abs(d) > .5) { a.dir = Math.sign(d); a.x += a.dir * 22 * dt; wframe = step ? "wA" : "wB"; }
+      else if (!a.carry) { a.carry = true; }
+      else if (car.mode === "load") { a.carry = false; car.kind = pk; car.mode = "up"; sfx("winch"); }
+    } else if (Math.abs(a.x - px1) > .5) { const d = px1 - a.x; a.dir = Math.sign(d); a.x += a.dir * 22 * dt; wframe = step ? "wA" : "wB"; }
+    const ay = foot[1] - (a.cheer && a.cheer !== 0 && step ? 2 : 0);
+    put(a.carry ? "wU" : wframe, a.x, ay, a.dir);
+    if (a.carry) { dot(g, tileCol(pk), a.x - 3, ay - 15, 7, 2); }
+    // 親方：棟の上を歩いて荷台から瓦を受け取り、ピースが出る所に置く
+    const b = crew.b, HX = -ridgeHalf + .3, SX = -1.3, RZ = 1.0;
+    let bframe = "wI";
+    if (b.place > 0) { b.place -= dt; bframe = "wC"; }
+    else if (b.cheer < 0) { b.cheer = Math.min(0, b.cheer + dt); bframe = step ? "wU" : "wI"; a.cheer = b.cheer; }
+    else {
+      const target = b.mode === "toHoist" ? HX : SX, d = target - b.x;
+      if (Math.abs(d) > .05) { b.dir = Math.sign(d); b.x += b.dir * Math.min(Math.abs(d), 4.5 * dt); bframe = b.carry ? (step ? "wUA" : "wUB") : (step ? "wA" : "wB"); }
+      else if (b.mode === "toHoist" && car.mode === "wait" && car.kind) { b.carry = car.kind; car.kind = null; car.mode = "down"; b.mode = "toSpot"; sfx("grab"); sfx("lower"); bframe = "wU"; }
+      else { bframe = b.carry ? "wU" : "wI"; if (b.mode === "toSpot") b.dir = 1; }
+      if (b.cheer > 0) { b.cheer -= dt; if (!b.carry) bframe = step ? "wU" : "wI"; }
+    }
+    const [bx, by] = scr(b.x, ROWS + .1, RZ, true), hop = bframe === "wU" && !b.carry && b.cheer && step ? 2 : 0;
+    put(bframe, bx, by - hop, b.dir);
+    if (b.carry) { dot(g, tileCol(b.carry), bx - 3, by - hop - 15, 7, 2); dot(g, "rgba(255,255,255,.5)", bx - 2, by - hop - 15, 5, 1); }
+    // 住職：本堂の脇の戸から出てきて屋根を見上げる
+    const pr = priest; pr.cool = Math.max(0, pr.cool - dt);
+    const wg = wingsOf(siteKey).slice(-1)[0];                            // 下屋のある現場は、右端の下屋の正面の戸から出る
+    const doorP = wg ? scr(wg[0] + Math.min(1.6, wg[1] - .7), GROUND, 1.26) : scr(COLS / 2 - 1.3, GROUND, -.78);
+    const outP = wg ? scr(wg[0] + wg[1] + .4, GROUND, 2.4) : scr(COLS / 2 + 1.2, GROUND, .2);
+    const dx = doorP[0], dy = doorP[1];
+    pr.t += dt;
+    if (pr.mode === "open" && pr.door === 0) sfx("door");
+    if (pr.mode === "close" && pr.door === 1) sfx("door");
+    if (pr.mode === "open") { pr.door = Math.min(1, pr.door + dt * 3); if (pr.door >= 1) { pr.mode = "walk"; pr.x = 0; } }
+    if (pr.mode === "walk") { pr.x = Math.min(1, pr.x + dt * 1.4); if (pr.x >= 1) { pr.mode = "look"; pr.t = 0; pr.say = pr.queue || ""; pr.queue = null; pr.shown = 0; sfx("rin"); } }
+    if (pr.mode === "look" && pr.t > 2.6) { pr.mode = "back"; pr.say = ""; }
+    if (pr.mode === "back") { pr.x = Math.max(0, pr.x - dt * 1.4); if (pr.x <= 0) pr.mode = "close"; }
+    if (pr.mode === "close") { pr.door = Math.max(0, pr.door - dt * 3); if (pr.door <= 0) pr.mode = "hidden"; }
+    dot(g, "#3b2a1c", dx - 4, dy - 13, 9, 13);                             // 戸口の枠
+    dot(g, "#151012", dx - 3, dy - 12, 7, 12);
+    dot(g, "#b88a55", dx - 3 + Math.round(pr.door * 6), dy - 12, 7 - Math.round(pr.door * 6), 12);   // 板戸
+    if (pr.mode !== "hidden" && pr.mode !== "open" && pr.mode !== "close") {
+      const ppx = dx + (outP[0] - dx) * pr.x, ppy = dy + (outP[1] - dy) * pr.x;
+      const moving = pr.mode === "walk" || pr.mode === "back";
+      const fr = moving ? (step ? "pA" : "pB") : (pr.say && /ありがた/.test(pr.say) ? "pG" : "pU");
+      put(fr, ppx, ppy, pr.mode === "back" ? 1 : -1);
+      if (pr.say && pr.mode === "look") {
+        const n = Math.min(pr.say.length, Math.floor(pr.t * 14));
+        if (n > (pr.shown || 0)) { pr.shown = n; if (pr.say[n - 1] !== "…" && pr.say[n - 1] !== "、") sfx("blip"); }
+        bubble.hidden = false; bubble.textContent = pr.say.slice(0, Math.max(1, n));
+        bubble.style.left = ppx * PS + "px"; bubble.style.top = (ppy - 15) * PS + "px";
+      } else bubble.hidden = true;
+    } else bubble.hidden = true;
+    // 夕立の雨粒が白砂にはねる
+    if (rainAmt > .05) for (let i = 0; i < 18 * rainAmt; i++) { const x = Math.random() * AW, y = Math.random() * AH; if (!onRoof(x, y)) dot(g, "rgba(220,235,255,.55)", x, y, 2, 1); }
+    pxCv.style.filter = rainAmt > .01 ? `brightness(${(1 - rainAmt * .35).toFixed(2)})` : "";
+  }
+  let roofPoly = [];
+  function onRoof(x, y) {
+    let inside = false;
+    for (let i = 0, j = roofPoly.length - 1; i < roofPoly.length; j = i++) {
+      const [xi, yi] = roofPoly[i], [xj, yj] = roofPoly[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function sizePixel() {
+    const w = window.innerWidth, h = window.innerHeight;
+    PS = Math.max(2, Math.round(w / 130)); AW = Math.ceil(w / PS); AH = Math.ceil(h / PS);
+    for (const c of [bgCv, pxCv]) { c.width = AW; c.height = AH; c.style.width = AW * PS + "px"; c.style.height = AH * PS + "px"; }
+    camera.updateMatrixWorld();
+    roofPoly = [scr(-COLS / 2 - .3, -.4, 0, true), scr(COLS / 2 + .3, -.4, 0, true), scr(COLS / 2 + .3, ROWS + .6, 0, true), scr(-COLS / 2 - .3, ROWS + .6, 0, true)];
+    drawBg();
+  }
+
+  // ===== はじめ =====
+  buildSite(siteKey); fit(); reset();
+  // タイトルの背景に、見本として何枚か葺いておく
+  [["okane", 0, 0, 0], ["taba", 1, 3, 0], ["toi", 2, 5, 0], ["san", 0, 3, 2], ["kane", 1, 0, 3], ["ni", 0, 6, 2]].forEach(([k, rot, px, py]) => {
+    cellsOf(k, rot, px, py).forEach(([x, y]) => {
+      if (x < 0 || x >= COLS || board[y][x]) return;
+      const m = makeTile(k); roof.add(m); place(m, x, y, true); board[y][x] = m;
+    });
+  });
+  card(`
+    <h1>瓦葺きパズル<span>3D</span></h1>
+    <div class="howto">
+      <b>移動</b><span>左右になぞる／◀ ▶</span>
+      <b>回転</b><span>画面をタップ／⟳</span>
+      <b>落とす</b><span>下にはじく／⤓</span>
+      <b>現場</b><span>${SITE_LINES}段葺き上げたら次の現場へ。切妻→谷→入母屋→L字→二つ谷と屋根の形が変わる</span>
+      <b class="rain">夕立</b><span>雨雲がたまると降る。上に瓦があって下が空いてる隙間から雨漏りして、バケツにたまる</span>
+    </div>
+    <p>横一段そろえば葺き上がり、雨雲も遠のく。<br>棟まで積むか、バケツがあふれたら負けや。</p>
+    ${best ? `<p class="best">自己ベスト ${best.toLocaleString()}</p>` : ""}
+    <button class="go" id="go" type="button">葺きはじめる</button>`, start);
+  setTimeout(() => pixelEvent("title"), 1200);
+})();
+</script>
+
+</body>
+</html>
