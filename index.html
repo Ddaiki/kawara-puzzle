@@ -18,6 +18,7 @@ function gtag() { dataLayer.push(arguments); }
 gtag("js", new Date()); gtag("config", "G-LWYHBZDC4L");
 window.track = (name, params) => gtag("event", name, params);   // ゲーム内の出来事（開始・現場完成・夕立・終了）
 </script>
+<script>window.RANKING = { url: "https://bdvhlciykngetzzdlndj.supabase.co", key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkdmhsY2l5a25nZXR6emRsbmRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExODA2MzYsImV4cCI6MjEwNjc1NjYzNn0.0qATqvH0CYvxaTqSJYNexpoV-6e4qhysx3sZduezuM0" };</script>
 <style>body { margin: 0; } [hidden] { display: none !important; }</style>
 <title>瓦葺きパズル 3D</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -142,6 +143,22 @@ canvas { display: block; touch-action: none; }
 }
 .card .go:active { transform: translateY(3px); box-shadow: 0 2px 0 #b85a00; }
 .best { font-size: .82rem; color: #5b6b78; }
+.card { max-height: 100%; overflow-y: auto; }
+/* 番付（ランキング） */
+.bz { text-align: left; background: #f6f0e2; border-radius: 12px; padding: 10px 12px; font-size: .84rem; display: grid; gap: 6px; }
+.bz h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.05rem; color: #8a5a1a; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bz h3 small { font-family: "Zen Kaku Gothic New", sans-serif; font-weight: 700; font-size: .78rem; color: #c0601a; }
+.bz ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 1px; }
+.bz li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; gap: 6px; padding: 2px 6px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.bz li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bz li span:first-child { color: #8a5a1a; font-weight: 700; }
+.bz li.me { background: #ffd9a3; font-weight: 700; }
+.bz li.gap { margin-top: 4px; }
+.bz .nm { display: flex; gap: 6px; align-items: center; font-size: .8rem; color: #5b6b78; }
+.bz .nm b { color: #1d2a36; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bz .nm button { flex: none; border: 1px solid #c9b48f; background: #fff; color: #8a5a1a; border-radius: 999px; padding: 3px 12px; font-size: .78rem; cursor: pointer; }
+.bz .nm input { flex: 1; min-width: 0; font-size: 16px; padding: 4px 8px; border: 1px solid #c9b48f; border-radius: 8px; }
+.card .link { background: none; border: none; color: #3f8fd8; font-size: .88rem; text-decoration: underline; cursor: pointer; padding: 2px; }
 .result { font-family: var(--display); font-size: 2.4rem; color: #ff8a1f; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .pop.show { animation-duration: .01s; } .bar.cloud.warn i { animation: none; } }
 </style>
@@ -895,6 +912,7 @@ canvas { display: block; touch-action: none; }
     const bonus = 2000 * level, done = SITES[site], nx = (site + 1) % SITES.length, N = SITES[nx];
     score += bonus; hud();
     track("site_clear", { site: done.name, score, lines, level });
+    submitScore("現場完成");
     showPop("葺き上がり！", `${done.name}の屋根、完成や　+${bonus.toLocaleString()}`);
     sfx("kane"); pixelEvent("site");
     setTimeout(() => card(`
@@ -937,15 +955,17 @@ canvas { display: block; touch-action: none; }
     pixelEvent("over", reason);
     const isBest = score > best;
     if (isBest) { best = score; try { localStorage.setItem("kawara3d-best", best); } catch (e) {} }
+    const sent = submitScore(reason === "water" ? "バケツ" : "棟まで");
     const head = reason === "water" ? "バケツがあふれた！" : "棟まで乱れた！";
     const note = reason === "water" ? "施主さんカンカンや…隙間は雨漏りのもとやで。" : "積み上がりすぎや。";
-    setTimeout(() => card(`
+    setTimeout(() => { card(`
       <h2>${head}</h2>
       <p>${note}</p>
       <div class="result">${score.toLocaleString()}</div>
       <p>${lines}段葺き上げ・${(lines * COLS / TILES_PER_M2).toFixed(1)}㎡</p>
       <p class="best">${isBest ? "自己ベスト更新や！" : "自己ベスト " + best.toLocaleString()}</p>
-      <button class="go" id="go" type="button">もう一回葺く</button>`, start), 1400);
+      <div class="bz" id="bz" hidden></div>
+      <button class="go" id="go" type="button">もう一回葺く</button>`, start); sent.then(res => showBanzuke($("bz"), res)); }, 1400);
   }
 
   // ===== 画面まわり =====
@@ -980,6 +1000,60 @@ canvas { display: block; touch-action: none; }
   }
   // アクセス解析：GitHub Pages 版だけ window.track が入る（Claude 版では何もしない）
   const track = (name, params) => { try { if (window.track) window.track(name, params); } catch (e) {} };
+
+  // ===== 番付（ランキング）：GitHub Pages 版だけ window.RANKING が入る =====
+  // 名前を決めなくても自動で番付に載る。名前は「唐草482」のように自動で付き、あとから変えられる
+  const RK = window.RANKING || null;
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const NICK = ["唐草", "巴", "鬼瓦", "桟瓦", "丸瓦", "のし", "雀口", "袖瓦", "軒瓦", "冠", "鳥衾", "影盛"];
+  let playerId = lsGet("kawara3d-player"), playerName = lsGet("kawara3d-name"), lastRes = null;
+  if (!playerId) {
+    playerId = crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ Math.random() * 16 >> c / 4).toString(16));
+    lsSet("kawara3d-player", playerId);
+  }
+  if (!playerName) { playerName = NICK[Math.floor(Math.random() * NICK.length)] + (100 + Math.floor(Math.random() * 900)); lsSet("kawara3d-name", playerName); }
+  const myTag = RK && crypto.subtle
+    ? crypto.subtle.digest("SHA-256", new TextEncoder().encode(playerId)).then(b => [...new Uint8Array(b)].slice(0, 4).map(x => x.toString(16).padStart(2, "0")).join("")).catch(() => "")
+    : Promise.resolve("");
+  const rkHead = () => ({ apikey: RK.key, Authorization: "Bearer " + RK.key, "Content-Type": "application/json" });
+  const rpc = (fn, body) => fetch(`${RK.url}/rest/v1/rpc/${fn}`, { method: "POST", headers: rkHead(), body: JSON.stringify(body) }).then(r => r.json());
+  function submitScore(reason) {
+    if (!RK || score <= 0) return Promise.resolve(null);
+    return rpc("submit_score", { p_player: playerId, p_name: playerName, p_score: score, p_lines: lines, p_site: SITES[site].name, p_reason: reason })
+      .then(r => (lastRes = r && r.ok ? r : lastRes)).catch(() => null);
+  }
+  async function showBanzuke(el, res) {
+    if (!RK || !el) return;
+    el.hidden = false;
+    if (!el.innerHTML) el.innerHTML = `<h3>番付<small>読み込み中…</small></h3>`;
+    try {
+      const [list, tag] = await Promise.all([
+        fetch(`${RK.url}/rest/v1/banzuke?select=tag,name,score&order=score.desc,created_at.asc&limit=10`, { headers: rkHead() }).then(r => r.json()),
+        myTag,
+      ]);
+      const mine = res && res.ok ? `<small>${res.total}人中 ${res.rank}位</small>` : "";
+      let rows = list.map((r, i) => `<li class="${r.tag === tag ? "me" : ""}"><span>${i + 1}</span><span>${esc(r.name)}</span><span>${r.score.toLocaleString()}</span></li>`).join("");
+      if (res && res.ok && res.rank > list.length) rows += `<li class="me gap"><span>${res.rank}</span><span>${esc(playerName)}</span><span>${res.best.toLocaleString()}</span></li>`;
+      el.innerHTML = `<h3>番付${mine}</h3><ol>${rows || "<li><span></span><span>まだ誰も載ってへん</span><span></span></li>"}</ol>
+        <div class="nm">名前：<b>${esc(playerName)}</b><button type="button" class="bzEdit">変える</button></div>`;
+      el.querySelector(".bzEdit").onclick = () => editName(el, res);
+    } catch (e) { el.innerHTML = `<h3>番付<small>つながりませんでした</small></h3>`; }
+  }
+  function editName(el, res) {
+    const nm = el.querySelector(".nm");
+    nm.innerHTML = `<input maxlength="12" value="${esc(playerName)}" aria-label="番付に出す名前" enterkeyhint="done"><button type="button">決定</button>`;
+    const inp = nm.querySelector("input"); inp.focus(); inp.select();
+    const ok = async () => {
+      const v = inp.value.trim().slice(0, 12); if (!v) return;
+      playerName = v; lsSet("kawara3d-name", v);
+      try { await rpc("rename_player", { p_player: playerId, p_name: v }); } catch (e) {}
+      showBanzuke(el, res);
+    };
+    nm.querySelector("button").onclick = ok;
+    inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") ok(); });
+  }
   function start() {
     unlockAudio(); track("game_start", { site: SITES[0].name });
     reset(); state = "play"; spawn();
@@ -1346,7 +1420,8 @@ canvas { display: block; touch-action: none; }
 
   // ===== ドット絵：境内の背景・職人と荷揚げ機・住職 =====
   const bgCv = $("bg"), pxCv = $("px"), bgx = bgCv.getContext("2d"), pxx = pxCv.getContext("2d");
-  let PS = 3, AW = 0, AH = 0;                                          // 1ドット＝PS（CSS px）
+  let PS = 3, AW = 0, AH = 0;
+  const CELL_DOTS = 10;                                               // 屋根1マス＝およそ10ドット                                          // 1ドット＝PS（CSS px）
   const _v = new THREE.Vector3();
   function scr(x, y, z, local) {                                       // 3Dの点 → ドット座標
     _v.set(x, y, z); if (local) roof.localToWorld(_v);
@@ -1564,7 +1639,13 @@ canvas { display: block; touch-action: none; }
   }
   function sizePixel() {
     const w = window.innerWidth, h = window.innerHeight;
-    PS = Math.max(2, Math.round(w / 130)); AW = Math.ceil(w / PS); AH = Math.ceil(h / PS);
+    // ドットの大きさは画面の幅ではなく、屋根1マスが画面でどれだけの大きさに見えるかで決める（横長のiPadやPCで人や戸が大きくなりすぎないように）
+    camera.updateMatrixWorld();
+    const a = new THREE.Vector3(-.5, ROWS / 2, 0), b = new THREE.Vector3(.5, ROWS / 2, 0);
+    roof.localToWorld(a).project(camera); roof.localToWorld(b).project(camera);
+    const cellPx = Math.abs(b.x - a.x) / 2 * w;
+    window.__cellPx = cellPx;
+    PS = Math.max(2, Math.round(cellPx / CELL_DOTS)); AW = Math.ceil(w / PS); AH = Math.ceil(h / PS);
     for (const c of [bgCv, pxCv]) { c.width = AW; c.height = AH; c.style.width = AW * PS + "px"; c.style.height = AH * PS + "px"; }
     camera.updateMatrixWorld();
     roofPoly = [scr(-COLS / 2 - .3, -.4, 0, true), scr(COLS / 2 + .3, -.4, 0, true), scr(COLS / 2 + .3, ROWS + .6, 0, true), scr(-COLS / 2 - .3, ROWS + .6, 0, true)];
@@ -1591,7 +1672,9 @@ canvas { display: block; touch-action: none; }
     </div>
     <p>横一段そろえば葺き上がり、雨雲も遠のく。<br>棟まで積むか、バケツがあふれたら負けや。</p>
     ${best ? `<p class="best">自己ベスト ${best.toLocaleString()}</p>` : ""}
+    ${RK ? `<button class="link" id="bzOpen" type="button">番付を見る</button><div class="bz" id="bz" hidden></div>` : ""}
     <button class="go" id="go" type="button">葺きはじめる</button>`, start);
+  if (RK) $("bzOpen").onclick = () => { $("bzOpen").hidden = true; showBanzuke($("bz"), lastRes); };
   setTimeout(() => pixelEvent("title"), 1200);
 })();
 </script>
